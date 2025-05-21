@@ -1,0 +1,19 @@
+{
+  "name": "water-data-fetcher",
+  "version": "1.0.0",
+  "main": "supabase.js",
+  "type": "module",
+
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.7",
+    "dotenv": "^16.5.0",
+    "node-fetch": "^3.3.2"
+  }
+}
