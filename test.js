@@ -1,66 +1,80 @@
+// Not using this, but keeping for reference
+
+
 import fetch from 'node-fetch';
 import { supabase } from './supabase.js';
 
-const GWLEVELS_URL = 'https://waterservices.usgs.gov/nwis/gwlevels/?format=json&countyCd=06047&indent=on&siteStatus=active&siteType=GW';
+async function fetchAndInsert() {
+  const siteUrl = 'https://api.waterdata.usgs.gov/ogcapi/v0/collections/monitoring-locations/items?f=json&lang=en-US&limit=100&skipGeometry=false&offset=8217&state_code=06&site_type_code=GW';
+  const res = await fetch(siteUrl);
 
-async function fetchAndInsertMercedData() {
-  const res = await fetch(GWLEVELS_URL);
   if (!res.ok) {
-    throw new Error(`HTTP ${res.status} - ${res.statusText}: ${await res.text()}`);
+    const errorText = await res.text();
+    throw new Error(`HTTP ${res.status} - ${res.statusText}\n${errorText}`);
   }
 
   const data = await res.json();
-  const seriesList = data?.value?.timeSeries ?? [];
 
-  for (const series of seriesList) {
-    const values = series?.values?.[0]?.value ?? [];
-    const variable = series.variable;
-    const site = series.sourceInfo;
-    const methodId = series.values?.[0]?.method?.[0]?.methodID ?? null;
+  const validItems = data.features.filter(item => {
+    const p = item.properties;
+    const g = item.geometry;
+    const c = g?.coordinates;
 
-    const lat = site?.geoLocation?.geogLocation?.latitude ?? null;
-    const lon = site?.geoLocation?.geogLocation?.longitude ?? null;
-    const geometry = lat && lon ? `SRID=4326;POINT(${lon} ${lat})` : null;
-    const siteCode = site?.siteCode?.[0]?.value ?? null;
-    const agencyCode = site?.siteCode?.[0]?.agencyCode ?? null;
-    const siteName = site?.siteName ?? null;
+    return (
+      p.site_type_code?.includes('GW') &&
+      p.state_code === '06' &&
+      item.id &&
+      c &&
+      p.agency_code &&
+      p.monitoring_location_number
+    );
+  });
 
-    const propsMap = Object.fromEntries((site.siteProperty || []).map(p => [p.name, p.value]));
+  for (const item of validItems) {
+    const p = item.properties;
+    const c = item.geometry.coordinates;
 
-    for (const v of values) {
-      const val = parseFloat(v.value);
-      if (isNaN(val)) continue;
+    const siteCode = item.id.split('-')[1]?.match(/^\d{1,15}$/)?.[0];
 
-      const insert = await supabase.from('groundwater_time_series').insert({
-        monitoring_location_id: siteCode,
-        site_name: siteName,
-        agency_code: agencyCode,
-        huc_code: propsMap.hucCd ?? null,
-        state_code: propsMap.stateCd ?? null,
-        county_code: propsMap.countyCd ?? null,
-        latitude: lat,
-        longitude: lon,
-        geometry,
-        variable_code: variable.variableCode?.[0]?.value ?? null,
-        variable_name: variable.variableName ?? null,
-        variable_description: variable.variableDescription ?? null,
-        unit: variable.unit?.unitCode ?? null,
-        variable_id: variable.variableCode?.[0]?.variableID ?? null,
-        measurement_datetime: v.dateTime,
-        measurement_value: val,
-        qualifiers: v.qualifiers ?? [],
-        method_id: methodId
-      });
+    if (!siteCode) {
+      console.warn(`Skipping ${item.id} — invalid site code`);
+      continue;
+    }
 
-      if (insert.error) {
-        console.error(`Insert error for ${siteCode} on ${v.dateTime}:`, insert.error.message);
-      }
+    const nwisUrl = `https://waterservices.usgs.gov/nwis/iv/?format=rdb&sites=${siteCode}&parameterCd=72019&startDT=2025-05-20&endDT=2025-05-27`;
+
+    const nwisRes = await fetch(nwisUrl);
+    const nwisText = await nwisRes.text();
+
+    if (!nwisRes.ok || !nwisText.includes('USGS')) {
+      console.log(`Skipping ${item.id} — no metadata from NWIS`);
+      continue;
+    }
+
+    const insertSite = await supabase.from('groundwater_monitoring_sites').insert({
+      monitoring_location_id: item.id || null,
+      geometry: c ? `SRID=4326;POINT(${c[0]} ${c[1]})` : null,
+      agency_code: p.agency_code || null,
+      monitoring_location_number: p.monitoring_location_number || null,
+      monitoring_location_name: p.monitoring_location_name || null,
+      state_code: p.state_code || null,
+      county_code: p.county_code || null,
+      site_type_code: p.site_type_code || null,
+      hydrologic_unit_code: p.hydrologic_unit_code || null,
+      aquifer_code: p.aquifer_code || null,
+      aquifer_type_code: p.aquifer_type_code || null,
+      altitude: parseFloat(p.altitude) || null,
+      vertical_datum: p.vertical_datum || null
+    });
+
+    if (insertSite.error) {
+      console.error(`Insert error for ${item.id}:`, insertSite.error.message);
     }
   }
 
-  console.log('Inserted groundwater time series for Merced County.');
+  console.log(`Inserted groundwater sites with verified NWIS metadata.`);
 }
 
-fetchAndInsertMercedData().catch(err => {
-  console.error('Time series fetch error:', err.message);
+fetchAndInsert().catch(err => {
+  console.error('Fetch error:', err.message);
 });
