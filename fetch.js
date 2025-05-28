@@ -2,8 +2,8 @@ import fetch from 'node-fetch';
 import { supabase } from './supabase.js';
 
 async function fetchAndInsert() {
-  const url = 'https://api.waterdata.usgs.gov/ogcapi/v0/collections/monitoring-locations/items?f=json&lang=en-US&limit=3000&skipGeometry=false&offset=0&state_code=06&site_type_code=GW';
-  const res = await fetch(url);
+  const siteUrl = 'https://api.waterdata.usgs.gov/ogcapi/v0/collections/monitoring-locations/items?f=json&lang=en-US&limit=100&skipGeometry=false&offset=8217&state_code=06&site_type_code=GW';
+  const res = await fetch(siteUrl);
 
   if (!res.ok) {
     const errorText = await res.text();
@@ -12,43 +12,43 @@ async function fetchAndInsert() {
 
   const data = await res.json();
 
-  console.log(`\n=== All ${data.features.length} Fetched Features ===`);
-  data.features.forEach((item, index) => {
-    console.log(`\n#${index + 1} — ID: ${item.id}`);
-    console.log(JSON.stringify(item, null, 2));
-  });
-
   const validItems = data.features.filter(item => {
     const p = item.properties;
     const g = item.geometry;
     const c = g?.coordinates;
 
     return (
-      p.site_type_code &&
-      p.site_type_code.includes('GW') &&
+      p.site_type_code?.includes('GW') &&
       p.state_code === '06' &&
       item.id &&
       c &&
       p.agency_code &&
-      p.monitoring_location_number &&
-      p.monitoring_location_name &&
-      p.county_code &&
-      p.hydrologic_unit_code &&
-      p.aquifer_code &&
-      p.aquifer_type_code &&
-      p.altitude &&
-      p.vertical_datum
+      p.monitoring_location_number
     );
   });
 
-
-
   for (const item of validItems) {
     const p = item.properties;
-    const g = item.geometry;
-    const c = g?.coordinates;
+    const c = item.geometry.coordinates;
 
-    const result = await supabase.from('groundwater_monitoring_sites').insert({
+    const siteCode = item.id.split('-')[1]?.match(/^\d{1,15}$/)?.[0];
+
+    if (!siteCode) {
+      console.warn(`Skipping ${item.id} — invalid site code`);
+      continue;
+    }
+
+    const nwisUrl = `https://waterservices.usgs.gov/nwis/iv/?format=rdb&sites=${siteCode}&parameterCd=72019&startDT=2025-05-20&endDT=2025-05-27`;
+
+    const nwisRes = await fetch(nwisUrl);
+    const nwisText = await nwisRes.text();
+
+    if (!nwisRes.ok || !nwisText.includes('USGS')) {
+      console.log(`Skipping ${item.id} — no metadata from NWIS`);
+      continue;
+    }
+
+    const insertSite = await supabase.from('groundwater_monitoring_sites').insert({
       monitoring_location_id: item.id || null,
       geometry: c ? `SRID=4326;POINT(${c[0]} ${c[1]})` : null,
       agency_code: p.agency_code || null,
@@ -60,16 +60,16 @@ async function fetchAndInsert() {
       hydrologic_unit_code: p.hydrologic_unit_code || null,
       aquifer_code: p.aquifer_code || null,
       aquifer_type_code: p.aquifer_type_code || null,
-      altitude: p.altitude ? parseFloat(p.altitude) : null,
+      altitude: parseFloat(p.altitude) || null,
       vertical_datum: p.vertical_datum || null
     });
 
-    if (result.error) {
-      console.error(`Insert error for ${item.id}:`, result.error.message);
+    if (insertSite.error) {
+      console.error(`Insert error for ${item.id}:`, insertSite.error.message);
     }
   }
 
-  console.log(`Inserted ${validItems.length} groundwater site(s).`);
+  console.log(`Inserted groundwater sites with verified NWIS metadata.`);
 }
 
 fetchAndInsert().catch(err => {
