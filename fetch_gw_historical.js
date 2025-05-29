@@ -1,5 +1,6 @@
 import fetch from 'node-fetch';
 import { supabase } from './supabase.js';
+import { upsertTimeSeriesData } from './utils.js';
 
 const GWLEVELS_URL = 'https://waterservices.usgs.gov/nwis/gwlevels/?format=json&countyCd=06047&indent=on&siteStatus=active&siteType=GW';
 
@@ -11,6 +12,7 @@ async function fetchAndInsertMercedData() {
 
   const data = await res.json();
   const seriesList = data?.value?.timeSeries ?? [];
+  const allRecords = [];
 
   for (const series of seriesList) {
     const values = series?.values?.[0]?.value ?? [];
@@ -31,7 +33,7 @@ async function fetchAndInsertMercedData() {
       const val = parseFloat(v.value);
       if (isNaN(val)) continue;
 
-      const insert = await supabase.from('groundwater_time_series').insert({
+      allRecords.push({
         monitoring_location_id: siteCode,
         site_name: siteName,
         agency_code: agencyCode,
@@ -51,14 +53,15 @@ async function fetchAndInsertMercedData() {
         qualifiers: v.qualifiers ?? [],
         method_id: methodId
       });
-
-      if (insert.error) {
-        console.error(`Insert error for ${siteCode} on ${v.dateTime}:`, insert.error.message);
-      }
     }
   }
 
-  console.log('Inserted groundwater time series for Merced County.');
+  if (allRecords.length > 0) {
+    await upsertTimeSeriesData(supabase, allRecords);
+    console.log(`Upserted ${allRecords.length} groundwater time series records for Merced County.`);
+  } else {
+    console.log('No valid records found to insert.');
+  }
 }
 
 fetchAndInsertMercedData().catch(err => {
