@@ -1,12 +1,12 @@
 import { supabase } from './supabase.js';
 import { getDateRanges, fetchWithRetry, buildGWLevelsURL, upsertTimeSeriesData, processCountyInBatches } from './utils.js';
-import { CALIFORNIA_COUNTIES, getAllCountyCodes, getPriorityCountyCodes, getCountyName } from './california_counties.js';
+import { getAllCountyCodes, getPriorityCountyCodes, getCountyName } from './california_counties.js';
 
-// Configuration
-const START_DATE = '2000-01-01'; // Adjust as needed
+// Configuration  
+const START_DATE = '2024-01-01'; // Recent data for testing
 const END_DATE = new Date().toISOString().split('T')[0]; // Today
 const CHUNK_MONTHS = 12; // Process 1 year at a time
-const USE_PRIORITY_COUNTIES_ONLY = false; // Set to true to only process high-priority counties
+const USE_PRIORITY_COUNTIES_ONLY = true; // Set to true to only process high-priority counties
 const COUNTY_BATCH_SIZE = 3; // Process 3 counties at a time
 
 async function processTimeSeriesData(seriesList) {

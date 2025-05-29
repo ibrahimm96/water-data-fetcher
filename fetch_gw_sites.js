@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 import { supabase } from './supabase.js';
 import { buildSitesURL, processCountyInBatches, fetchWithRetry } from './utils.js';
 import { getAllCountyCodes, getPriorityCountyCodes, getCountyName } from './california_counties.js';
