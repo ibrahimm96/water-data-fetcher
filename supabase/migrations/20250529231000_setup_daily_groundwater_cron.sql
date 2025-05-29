@@ -1,4 +1,7 @@
--- Enable pg_cron extension if not already enabled
+-- Enable pg_cron extension for scheduled jobs
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+-- Setup daily groundwater update cron job
 SELECT cron.schedule(
   'daily-groundwater-update',           -- job name
   '0 2 * * *',                         -- cron expression (daily at 2 AM UTC)
@@ -12,8 +15,8 @@ SELECT cron.schedule(
   $$
 );
 
--- To view scheduled jobs:
--- SELECT * FROM cron.job;
+-- Add helpful comments
+COMMENT ON EXTENSION pg_cron IS 'PostgreSQL cron extension for scheduling jobs';
 
--- To unschedule the job:
--- SELECT cron.unschedule('daily-groundwater-update');
+-- To view scheduled jobs, run: SELECT * FROM cron.job;
+-- To unschedule the job, run: SELECT cron.unschedule('daily-groundwater-update');
