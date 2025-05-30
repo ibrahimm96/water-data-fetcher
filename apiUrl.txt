@@ -3,3 +3,14 @@ https://api.waterdata.usgs.gov/ogcapi/v0/collections/monitoring-locations/items?
 
 GROUNDWATER TIME SERIES
 https://waterservices.usgs.gov/
+
+deep research gpt
+use frameworks with most stack overflow questions---react?
+
+1. finalize data
+2. make a map of most recent 24hr values on frontend
+
+
+
+
+
