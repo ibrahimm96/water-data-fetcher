@@ -284,33 +284,30 @@ export function MapView() {
   if (error) return <div style={{ padding: '20px', color: 'red' }}>Error: {error}</div>
 
   return (
-    <div style={{ padding: '20px' }}>
-      <div style={{ marginBottom: '20px' }}>
-        <h1>California Groundwater Monitoring System</h1>
-        <h2>All Monitoring Sites Map</h2>
-        <p style={{ color: '#666', fontSize: '14px' }}>
-          Showing all sites with time series data. Marker size and color indicate data volume.
-        </p>
-        <div style={{ display: 'flex', gap: '20px', fontSize: '12px', marginBottom: '10px' }}>
-          <span><span style={{ color: '#e74c3c' }}>●</span> 10+ measurements</span>
-          <span><span style={{ color: '#f39c12' }}>●</span> 3-10 measurements</span>
-          <span><span style={{ color: '#3498db' }}>●</span> 0-3 measurements</span>
-        </div>
-      </div>
-      
-      <div 
-        ref={mapContainer} 
-        style={{ 
-          height: '600px', 
-          width: '100%', 
-          borderRadius: '8px',
-          border: '1px solid #ddd'
-        }} 
-      />
-      
-      <div style={{ marginTop: '20px', fontSize: '14px', color: '#666' }}>
-        <strong>Total sites displayed:</strong> {sites.length}
+  <div style={{ padding: '20px' }}>
+    <div style={{ marginBottom: '20px' }}>
+      <h1 style={{ fontSize: '20px', margin: 0 }}>
+        California Groundwater Monitoring Sites
+      </h1>
+      <p style={{ color: '#666', fontSize: '14px' }}>
+        Showing all sites with historical time series data. Marker size and color indicate data volume. Total sites displayed: {sites.length}.
+      </p>
+      <div style={{ display: 'flex', gap: '20px', fontSize: '12px', marginBottom: '10px' }}>
+        <span><span style={{ color: '#e74c3c' }}>●</span> 10+ measurements</span>
+        <span><span style={{ color: '#f39c12' }}>●</span> 3-10 measurements</span>
+        <span><span style={{ color: '#3498db' }}>●</span> 0-3 measurements</span>
       </div>
     </div>
-  )
+
+    <div 
+      ref={mapContainer} 
+      style={{ 
+        height: '675px', 
+        width: '1300px', 
+        borderRadius: '8px',
+        border: '1px solid #ddd'
+      }} 
+    />
+  </div>
+);
 }
