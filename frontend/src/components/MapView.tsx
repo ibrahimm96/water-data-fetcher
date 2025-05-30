@@ -44,12 +44,12 @@ export function MapView() {
     // Wait for map to load before adding data
     map.current.on('load', () => {
       // Prepare GeoJSON data for clustering
-      const geojsonData = {
+      const geojsonData: GeoJSON.FeatureCollection = {
         type: 'FeatureCollection',
         features: sites
           .filter(site => site.latitude && site.longitude)
           .map(site => ({
-            type: 'Feature',
+            type: 'Feature' as const,
             properties: {
               monitoring_location_id: site.monitoring_location_id,
               site_name: site.site_name,
@@ -63,7 +63,7 @@ export function MapView() {
               variable_name: site.variable_name
             },
             geometry: {
-              type: 'Point',
+              type: 'Point' as const,
               coordinates: [site.longitude, site.latitude]
             }
           }))
@@ -148,23 +148,35 @@ export function MapView() {
         const features = map.current!.queryRenderedFeatures(e.point, {
           layers: ['clusters']
         })
-        const clusterId = features[0].properties.cluster_id
-        map.current!.getSource('sites').getClusterExpansionZoom(clusterId, (err, zoom) => {
-          if (err) return
-          map.current!.easeTo({
-            center: features[0].geometry.coordinates,
-            zoom: zoom
-          })
-        })
+        if (features && features.length > 0) {
+          const clusterId = features[0].properties?.cluster_id
+          const source = map.current!.getSource('sites') as mapboxgl.GeoJSONSource
+          if (source && clusterId) {
+            source.getClusterExpansionZoom(clusterId, (err: any, zoom: any) => {
+              if (err) return
+              const geometry = features[0].geometry as GeoJSON.Point
+              map.current!.easeTo({
+                center: geometry.coordinates as [number, number],
+                zoom: zoom
+              })
+            })
+          }
+        }
       })
 
       // Click event for individual points
       map.current!.on('click', 'unclustered-point', (e) => {
-        const coordinates = e.features[0].geometry.coordinates.slice()
-        const properties = e.features[0].properties
+        if (!e.features || e.features.length === 0) return
+        
+        const feature = e.features[0]
+        const geometry = feature.geometry as GeoJSON.Point
+        const coordinates = geometry.coordinates.slice() as [number, number]
+        const properties = feature.properties
+
+        if (!properties) return
 
         // Format dates
-        const formatDate = (dateString) => {
+        const formatDate = (dateString: string | null | undefined): string => {
           if (!dateString) return 'N/A'
           return new Date(dateString).toLocaleDateString('en-US', {
             year: 'numeric',
@@ -173,7 +185,7 @@ export function MapView() {
           })
         }
 
-        const formatDateTime = (dateString) => {
+        const formatDateTime = (dateString: string | null | undefined): string => {
           if (!dateString) return 'N/A'
           return new Date(dateString).toLocaleString('en-US', {
             year: 'numeric',
@@ -185,13 +197,14 @@ export function MapView() {
         }
 
         // Calculate data span
-        const getDataSpan = (earliest, latest) => {
+        const getDataSpan = (earliest: string | null | undefined, latest: string | null | undefined): string => {
           if (!earliest || !latest) return 'N/A'
           const start = new Date(earliest)
           const end = new Date(latest)
-          const diffYears = Math.floor((end - start) / (1000 * 60 * 60 * 24 * 365))
+          const diffTime = end.getTime() - start.getTime()
+          const diffYears = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 365))
           if (diffYears > 0) return `${diffYears} year${diffYears > 1 ? 's' : ''}`
-          const diffDays = Math.floor((end - start) / (1000 * 60 * 60 * 24))
+          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
           return `${diffDays} day${diffDays > 1 ? 's' : ''}`
         }
 
@@ -205,7 +218,7 @@ export function MapView() {
               
               <div style="margin-bottom: 12px; padding: 8px; background-color: #f8f9fa; border-radius: 4px;">
                 <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
-                  <strong>Location ID:</strong> ${properties.monitoring_location_id}
+                  <strong>Location ID:</strong> ${properties.monitoring_location_id || 'N/A'}
                 </div>
                 <div style="font-size: 12px; color: #666;">
                   <strong>County:</strong> ${properties.county_code || 'N/A'} | 
@@ -218,7 +231,7 @@ export function MapView() {
                   <strong>📊 Data Summary</strong>
                 </div>
                 <div style="font-size: 12px; color: #555; margin-bottom: 4px;">
-                  <strong>Total Measurements:</strong> ${properties.measurement_count}
+                  <strong>Total Measurements:</strong> ${properties.measurement_count || 0}
                 </div>
                 <div style="font-size: 12px; color: #555; margin-bottom: 4px;">
                   <strong>Data Span:</strong> ${getDataSpan(properties.earliest_measurement, properties.latest_measurement)}
@@ -236,7 +249,7 @@ export function MapView() {
                   <strong>Date:</strong> ${formatDateTime(properties.latest_measurement)}
                 </div>
                 <div style="font-size: 12px; color: #555; margin-bottom: 4px;">
-                  <strong>Value:</strong> ${properties.latest_value} ${properties.unit || ''}
+                  <strong>Value:</strong> ${properties.latest_value || 'N/A'} ${properties.unit || ''}
                 </div>
                 <div style="font-size: 11px; color: #888;">
                   <strong>First Record:</strong> ${formatDate(properties.earliest_measurement)}
@@ -265,7 +278,8 @@ export function MapView() {
       if (geojsonData.features.length > 0) {
         const bounds = new mapboxgl.LngLatBounds()
         geojsonData.features.forEach(feature => {
-          bounds.extend(feature.geometry.coordinates)
+          const geometry = feature.geometry as GeoJSON.Point
+          bounds.extend(geometry.coordinates as [number, number])
         })
         map.current!.fitBounds(bounds, { padding: 50 })
       }
