@@ -11,7 +11,12 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@mui/material": "^7.1.1",
+    "@mui/x-charts": "^8.5.1",
     "@supabase/supabase-js": "^2.49.8",
+    "clsx": "^2.1.1",
     "dotenv": "^16.5.0",
     "node-fetch": "^3.3.2"
   }

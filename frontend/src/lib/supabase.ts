@@ -418,3 +418,59 @@ export const fetchSiteTimeSeriesSummary = async (locationId: string) => {
     throw error
   }
 }
+
+// New function: Fetch ALL time-series data for charting
+export const fetchSiteTimeSeriesForChart = async (locationId: string) => {
+  console.log(`📈 Loading full time-series data for chart: ${locationId}`)
+  
+  try {
+    // Get all measurements for the site (for charting)
+    const { data: allMeasurements, error } = await supabase
+      .from('groundwater_time_series')
+      .select('measurement_datetime, measurement_value, unit, variable_name')
+      .eq('monitoring_location_number', locationId)
+      .not('measurement_datetime', 'is', null)
+      .not('measurement_value', 'is', null)
+      .order('measurement_datetime', { ascending: true }) // Chronological order for chart
+    
+    if (error) {
+      console.error(`❌ Error fetching chart data for ${locationId}:`, error)
+      throw error
+    }
+    
+    if (!allMeasurements || allMeasurements.length === 0) {
+      return {
+        data: [],
+        unit: null,
+        variable_name: null,
+        dateRange: null
+      }
+    }
+    
+    // Process data for MUI LineChart
+    const chartData = allMeasurements.map(measurement => ({
+      date: new Date(measurement.measurement_datetime).getTime(), // Convert to timestamp for chart
+      value: measurement.measurement_value,
+      dateString: measurement.measurement_datetime // Keep original for display
+    }))
+    
+    const dateRange = {
+      start: allMeasurements[0].measurement_datetime,
+      end: allMeasurements[allMeasurements.length - 1].measurement_datetime
+    }
+    
+    console.log(`✅ Loaded ${allMeasurements.length} measurements for chart`)
+    
+    return {
+      data: chartData,
+      unit: allMeasurements[0].unit,
+      variable_name: allMeasurements[0].variable_name,
+      dateRange: dateRange,
+      totalPoints: allMeasurements.length
+    }
+    
+  } catch (error) {
+    console.error(`💥 Error fetching chart data for ${locationId}:`, error)
+    throw error
+  }
+}

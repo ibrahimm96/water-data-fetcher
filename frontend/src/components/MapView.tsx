@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
-import { fetchAllSitesWithMeasurementData, fetchSiteTimeSeriesSummary } from '../lib/supabase'
+import { fetchAllSitesWithMeasurementData, fetchSiteTimeSeriesForChart } from '../lib/supabase'
+import { TimeSeriesChart } from './TimeSeriesChart'
 
 // You'll need to add your Mapbox access token to .env.local
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || ''
@@ -13,6 +14,13 @@ export function MapView() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  
+  // Chart state
+  const [chartVisible, setChartVisible] = useState(false)
+  const [chartData, setChartData] = useState<any>(null)
+  const [chartLoading, setChartLoading] = useState(false)
+  const [chartError, setChartError] = useState<string | null>(null)
+  const [selectedSite, setSelectedSite] = useState<{ id: string; name: string } | null>(null)
 
   useEffect(() => {
     const loadSites = async () => {
@@ -155,154 +163,34 @@ export function MapView() {
         }
       })
 
-      // Click event for individual points - load time-series data on demand
+      // Click event for individual points - show chart popup
       map.current!.on('click', 'unclustered-point', async (e) => {
         if (!e.features || e.features.length === 0) return
         
         const feature = e.features[0]
-        const geometry = feature.geometry as GeoJSON.Point
-        const coordinates = geometry.coordinates.slice() as [number, number]
         const properties = feature.properties
 
         if (!properties) return
 
         const locationId = properties.monitoring_location_id
+        const siteName = properties.site_name || 'Unnamed Site'
 
-        // Show loading popup first
-        const loadingPopup = new mapboxgl.Popup()
-          .setLngLat(coordinates)
-          .setHTML(`
-            <div style="font-family: Arial, sans-serif; max-width: 300px; text-align: center; padding: 20px;">
-              <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #2c3e50;">
-                ${properties.site_name || 'Unnamed Site'}
-              </h3>
-              <div style="font-size: 14px; color: #666; margin-bottom: 16px;">
-                Loading historical data...
-              </div>
-              <div style="width: 24px; height: 24px; margin: 0 auto; border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-              <style>
-                @keyframes spin {
-                  0% { transform: rotate(0deg); }
-                  100% { transform: rotate(360deg); }
-                }
-              </style>
-            </div>
-          `)
-          .addTo(map.current!)
+        // Set selected site and show chart
+        setSelectedSite({ id: locationId, name: siteName })
+        setChartVisible(true)
+        setChartLoading(true)
+        setChartError(null)
+        setChartData(null)
 
         try {
-          // Fetch time-series data on demand
-          const timeSeriesData = await fetchSiteTimeSeriesSummary(locationId)
-
-          // Format dates
-          const formatDate = (dateString: string | null | undefined): string => {
-            if (!dateString) return 'N/A'
-            return new Date(dateString).toLocaleDateString('en-US', {
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric'
-            })
-          }
-
-          const formatDateTime = (dateString: string | null | undefined): string => {
-            if (!dateString) return 'N/A'
-            return new Date(dateString).toLocaleString('en-US', {
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            })
-          }
-
-          // Calculate data span
-          const getDataSpan = (earliest: string | null | undefined, latest: string | null | undefined): string => {
-            if (!earliest || !latest) return 'N/A'
-            const start = new Date(earliest)
-            const end = new Date(latest)
-            const diffTime = end.getTime() - start.getTime()
-            const diffYears = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 365))
-            if (diffYears > 0) return `${diffYears} year${diffYears > 1 ? 's' : ''}`
-            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
-            return `${diffDays} day${diffDays > 1 ? 's' : ''}`
-          }
-
-          // Remove loading popup
-          loadingPopup.remove()
-
-          // Show popup with loaded data
-          new mapboxgl.Popup()
-            .setLngLat(coordinates)
-            .setHTML(`
-              <div style="font-family: Arial, sans-serif; max-width: 300px;">
-                <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #2c3e50;">
-                  ${properties.site_name || 'Unnamed Site'}
-                </h3>
-                
-                <div style="margin-bottom: 12px; padding: 8px; background-color: #f8f9fa; border-radius: 4px;">
-                  <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
-                    <strong>Location ID:</strong> ${properties.monitoring_location_id || 'N/A'}
-                  </div>
-                  <div style="font-size: 12px; color: #666;">
-                    <strong>County:</strong> ${properties.county_code || 'N/A'} | 
-                    <strong>State:</strong> ${properties.state_code || 'N/A'}
-                  </div>
-                </div>
-
-                <div style="margin-bottom: 12px;">
-                  <div style="font-size: 14px; color: #2c3e50; margin-bottom: 6px;">
-                    <strong>📊 Data Summary</strong>
-                  </div>
-                  <div style="font-size: 12px; color: #555; margin-bottom: 4px;">
-                    <strong>Total Measurements:</strong> ${timeSeriesData.measurement_count || 0}
-                  </div>
-                  <div style="font-size: 12px; color: #555; margin-bottom: 4px;">
-                    <strong>Data Span:</strong> ${getDataSpan(timeSeriesData.earliest_measurement, timeSeriesData.latest_measurement)}
-                  </div>
-                  <div style="font-size: 12px; color: #555;">
-                    <strong>Variable:</strong> ${timeSeriesData.variable_name || 'N/A'}
-                  </div>
-                </div>
-
-                <div style="border-top: 1px solid #dee2e6; padding-top: 12px;">
-                  <div style="font-size: 14px; color: #2c3e50; margin-bottom: 6px;">
-                    <strong>🕒 Latest Measurement</strong>
-                  </div>
-                  <div style="font-size: 12px; color: #555; margin-bottom: 4px;">
-                    <strong>Date:</strong> ${formatDateTime(timeSeriesData.latest_measurement)}
-                  </div>
-                  <div style="font-size: 12px; color: #555; margin-bottom: 4px;">
-                    <strong>Value:</strong> ${timeSeriesData.latest_value || 'N/A'} ${timeSeriesData.unit || ''}
-                  </div>
-                  <div style="font-size: 11px; color: #888;">
-                    <strong>First Record:</strong> ${formatDate(timeSeriesData.earliest_measurement)}
-                  </div>
-                </div>
-              </div>
-            `)
-            .addTo(map.current!)
-
+          // Fetch full time-series data for chart
+          const chartTimeSeriesData = await fetchSiteTimeSeriesForChart(locationId)
+          setChartData(chartTimeSeriesData)
+          setChartLoading(false)
         } catch (error) {
-          console.error('Error loading time-series data:', error)
-          
-          // Remove loading popup
-          loadingPopup.remove()
-          
-          // Show error popup
-          new mapboxgl.Popup()
-            .setLngLat(coordinates)
-            .setHTML(`
-              <div style="font-family: Arial, sans-serif; max-width: 300px;">
-                <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #2c3e50;">
-                  ${properties.site_name || 'Unnamed Site'}
-                </h3>
-                <div style="padding: 8px; background-color: #f8d7da; color: #721c24; border-radius: 4px;">
-                  <strong>Error loading time-series data</strong><br>
-                  Please try clicking again.
-                </div>
-              </div>
-            `)
-            .addTo(map.current!)
+          console.error('Error loading chart data:', error)
+          setChartError(error instanceof Error ? error.message : 'Failed to load chart data')
+          setChartLoading(false)
         }
       })
 
@@ -665,7 +553,7 @@ export function MapView() {
                 <span style={{ color: '#2c3e50' }}>Monitoring sites with time-series data</span>
               </div>
               <div style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
-                Click any site to load measurement details
+                Click any site to view time-series chart
               </div>
             </div>
             <div style={{
@@ -681,6 +569,22 @@ export function MapView() {
           </div>
         </div>
       </div>
+
+      {/* Time Series Chart Component */}
+      <TimeSeriesChart
+        siteId={selectedSite?.id || ''}
+        siteName={selectedSite?.name || ''}
+        isVisible={chartVisible}
+        onClose={() => {
+          setChartVisible(false)
+          setSelectedSite(null)
+          setChartData(null)
+          setChartError(null)
+        }}
+        chartData={chartData}
+        isLoading={chartLoading}
+        error={chartError}
+      />
     </div>
   );
 }
