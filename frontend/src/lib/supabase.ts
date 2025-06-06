@@ -69,6 +69,7 @@ export const fetchTimeSeriesForSite = async (locationId: string) => {
     .from('groundwater_time_series')
     .select('*')
     .eq('monitoring_location_number', locationId)
+    .eq('variable_code', '72019')
     .order('measurement_datetime', { ascending: false })
   
   if (error) throw error
@@ -163,13 +164,14 @@ const parseWKTPoint = (wktGeometry: string): { latitude: number; longitude: numb
   return { latitude, longitude }
 }
 
-// New simplified function: Load directly from the view (much faster!)
+// New simplified function: Load sites and measurement counts
 export const fetchAllSitesWithMeasurementData = async () => {
-  console.log('🚀 Loading sites directly from gw_sites_with_time_series_data view...')
+  console.log('🚀 Loading sites with measurement counts...')
   
   try {
+    // First, get all sites from the view
     const allSites: any[] = []
-    const batchSize = 1000 // Can use larger batches since it's a single query per batch
+    const batchSize = 1000
     let offset = 0
     let hasMore = true
     
@@ -210,15 +212,14 @@ export const fetchAllSitesWithMeasurementData = async () => {
           }
           
           return {
-            monitoring_location_id: site.monitoring_location_number, // Keep old name for frontend compatibility
+            monitoring_location_id: site.monitoring_location_number,
             site_name: site.monitoring_location_name,
             county_code: site.county_code,
             state_code: site.state_code,
             latitude: coords.latitude,
             longitude: coords.longitude,
             agency_code: site.agency_code,
-            // Placeholder values - will be loaded on-demand when clicked
-            measurement_count: null,
+            measurement_count: 0, // Will be populated below
             latest_measurement: null,
             earliest_measurement: null,
             latest_value: null,
@@ -226,30 +227,54 @@ export const fetchAllSitesWithMeasurementData = async () => {
             variable_name: null
           }
         })
-        .filter(site => site !== null) // Remove sites with invalid geometry
+        .filter(site => site !== null)
       
       allSites.push(...batchSites)
       
       console.log(`Loaded ${batchSites.length} sites (${allSites.length} total)`)
       
-      // Check if we got fewer results than requested (means we're at the end)
       hasMore = batch.length === batchSize
       offset += batchSize
       
-      // Safety check
       if (offset > 50000) {
         console.warn('Reached safety limit, stopping')
         break
       }
     }
     
-    console.log(`🎉 SUCCESS! Loaded ${allSites.length} sites from view`)
-    console.log(`⚡ Much faster - single table query instead of complex joins!`)
+    // Now get measurement counts for all sites
+    console.log('📊 Loading measurement counts...')
+    const { data: measurementCounts, error: countError } = await supabase
+      .from('groundwater_time_series')
+      .select('monitoring_location_number')
+      .eq('variable_code', '72019')
+      .not('measurement_datetime', 'is', null)
+      .not('measurement_value', 'is', null)
+    
+    if (countError) {
+      console.warn('Could not load measurement counts:', countError)
+    } else if (measurementCounts) {
+      // Count measurements per site
+      const countMap = new Map<string, number>()
+      measurementCounts.forEach(measurement => {
+        const siteId = measurement.monitoring_location_number
+        countMap.set(siteId, (countMap.get(siteId) || 0) + 1)
+      })
+      
+      // Apply counts to sites
+      allSites.forEach(site => {
+        site.measurement_count = countMap.get(site.monitoring_location_id) || 0
+      })
+      
+      console.log(`📈 Applied measurement counts to ${allSites.length} sites`)
+    }
+    
+    console.log(`🎉 SUCCESS! Loaded ${allSites.length} sites with measurement data`)
     
     return allSites
     
   } catch (error) {
-    console.error('💥 Error loading sites from view:', error)
+    console.error('💥 Error loading sites:', error)
     throw error
   }
 }
@@ -319,7 +344,7 @@ export const fetchAllSitesWithMeasurementDataProgressive = async (onBatchLoaded?
             latitude: coords.latitude,
             longitude: coords.longitude,
             agency_code: site.agency_code,
-            measurement_count: null,
+            measurement_count: 0, // Will be populated separately
             latest_measurement: null,
             earliest_measurement: null,
             latest_value: null,
@@ -361,6 +386,7 @@ export const fetchSiteTimeSeriesSummary = async (locationId: string) => {
       .from('groundwater_time_series')
       .select('measurement_datetime, measurement_value, unit, variable_name', { count: 'exact' })
       .eq('monitoring_location_number', locationId)
+      .eq('variable_code', '72019')
       .not('measurement_datetime', 'is', null)
       .not('measurement_value', 'is', null)
       .order('measurement_datetime', { ascending: false })
@@ -390,6 +416,7 @@ export const fetchSiteTimeSeriesSummary = async (locationId: string) => {
         .from('groundwater_time_series')
         .select('measurement_datetime')
         .eq('monitoring_location_number', locationId)
+        .eq('variable_code', '72019')
         .not('measurement_datetime', 'is', null)
         .not('measurement_value', 'is', null)
         .order('measurement_datetime', { ascending: true })
@@ -429,6 +456,7 @@ export const fetchSiteTimeSeriesForChart = async (locationId: string) => {
       .from('groundwater_time_series')
       .select('measurement_datetime, measurement_value, unit, variable_name')
       .eq('monitoring_location_number', locationId)
+      .eq('variable_code', '72019')
       .not('measurement_datetime', 'is', null)
       .not('measurement_value', 'is', null)
       .order('measurement_datetime', { ascending: true }) // Chronological order for chart

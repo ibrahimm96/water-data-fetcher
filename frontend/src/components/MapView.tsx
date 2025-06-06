@@ -128,15 +128,20 @@ export function MapView() {
         }
       })
 
-      // Add individual points (unclustered) - uniform styling since we don't have measurement counts yet
+      // Add individual points (unclustered) with color-coding based on measurement count
       map.current!.addLayer({
         id: 'unclustered-point',
         type: 'circle',
         source: 'sites',
         filter: ['!', ['has', 'point_count']],
         paint: {
-          'circle-color': '#3498db', // Blue for all sites initially
-          'circle-radius': 6, // Medium size for all sites
+          'circle-color': [
+            'case',
+            ['>=', ['get', 'measurement_count'], 10], '#e74c3c', // Red for 10+ measurements
+            ['>=', ['get', 'measurement_count'], 3], '#f39c12', // Yellow/orange for 3-9 measurements
+            '#3498db' // Blue for 0-2 measurements
+          ],
+          'circle-radius': 6,
           'circle-stroke-width': 2,
           'circle-stroke-color': '#fff'
         }
@@ -545,12 +550,30 @@ export function MapView() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <div style={{ display: 'flex', alignItems: 'center' }}>
                 <span style={{
+                  color: '#e74c3c',
+                  marginRight: '10px',
+                  fontSize: '16px',
+                  lineHeight: '1'
+                }}>●</span>
+                <span style={{ color: '#2c3e50' }}>10+ measurements</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <span style={{
+                  color: '#f39c12',
+                  marginRight: '10px',
+                  fontSize: '16px',
+                  lineHeight: '1'
+                }}>●</span>
+                <span style={{ color: '#2c3e50' }}>3-9 measurements</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <span style={{
                   color: '#3498db',
                   marginRight: '10px',
                   fontSize: '16px',
                   lineHeight: '1'
                 }}>●</span>
-                <span style={{ color: '#2c3e50' }}>Monitoring sites with time-series data</span>
+                <span style={{ color: '#2c3e50' }}>0-2 measurements</span>
               </div>
               <div style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
                 Click any site to view time-series chart

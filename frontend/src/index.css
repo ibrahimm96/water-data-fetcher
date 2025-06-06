@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 @layer base {
   :root {
@@ -98,7 +96,7 @@
 
   /* Focus styles */
   :focus-visible {
-    @apply outline-2 outline-offset-2 outline-primary-500;
+    @apply outline-2 outline-offset-2 outline-blue-500;
   }
 
   /* Scrollbar styling */
@@ -127,19 +125,19 @@
   }
 
   .btn-primary {
-    @apply btn bg-primary-500 text-white hover:bg-primary-600 focus:ring-primary-500 shadow-soft hover:shadow-medium;
+    @apply btn bg-blue-500 text-white hover:bg-blue-600 focus:ring-blue-500 shadow-soft hover:shadow-medium;
   }
 
   .btn-secondary {
-    @apply btn bg-secondary-500 text-white hover:bg-secondary-600 focus:ring-secondary-500 shadow-soft hover:shadow-medium;
+    @apply btn bg-cyan-500 text-white hover:bg-cyan-600 focus:ring-cyan-500 shadow-soft hover:shadow-medium;
   }
 
   .btn-outline {
-    @apply btn border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-primary-500;
+    @apply btn border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-blue-500;
   }
 
   .btn-ghost {
-    @apply btn text-gray-700 hover:bg-gray-100 focus:ring-primary-500;
+    @apply btn text-gray-700 hover:bg-gray-100 focus:ring-blue-500;
   }
 
   /* Card component */
@@ -231,7 +229,7 @@
 
   /* Text utilities */
   .text-gradient {
-    @apply bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent;
   }
 
   /* Layout utilities */
