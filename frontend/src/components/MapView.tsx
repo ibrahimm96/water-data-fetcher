@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
-import { fetchAllSitesWithMeasurementData } from '../lib/supabase'
+import { fetchAllSitesWithMeasurementData, fetchSiteTimeSeriesSummary } from '../lib/supabase'
 
 // You'll need to add your Mapbox access token to .env.local
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || ''
@@ -120,26 +120,16 @@ export function MapView() {
         }
       })
 
-      // Add individual points (unclustered)
+      // Add individual points (unclustered) - uniform styling since we don't have measurement counts yet
       map.current!.addLayer({
         id: 'unclustered-point',
         type: 'circle',
         source: 'sites',
         filter: ['!', ['has', 'point_count']],
         paint: {
-          'circle-color': [
-            'case',
-            ['>=', ['get', 'measurement_count'], 10], '#e74c3c', // Red for 10+
-            ['>=', ['get', 'measurement_count'], 3], '#f39c12',  // Orange for 3-10
-            '#3498db' // Blue for 0-3
-          ],
-          'circle-radius': [
-            'case',
-            ['>=', ['get', 'measurement_count'], 10], 8, // Large for 10+
-            ['>=', ['get', 'measurement_count'], 3], 6,  // Medium for 3-10
-            4 // Small for 0-3
-          ],
-          'circle-stroke-width': 1,
+          'circle-color': '#3498db', // Blue for all sites initially
+          'circle-radius': 6, // Medium size for all sites
+          'circle-stroke-width': 2,
           'circle-stroke-color': '#fff'
         }
       })
@@ -165,8 +155,8 @@ export function MapView() {
         }
       })
 
-      // Click event for individual points
-      map.current!.on('click', 'unclustered-point', (e) => {
+      // Click event for individual points - load time-series data on demand
+      map.current!.on('click', 'unclustered-point', async (e) => {
         if (!e.features || e.features.length === 0) return
         
         const feature = e.features[0]
@@ -176,89 +166,144 @@ export function MapView() {
 
         if (!properties) return
 
-        // Format dates
-        const formatDate = (dateString: string | null | undefined): string => {
-          if (!dateString) return 'N/A'
-          return new Date(dateString).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-          })
-        }
+        const locationId = properties.monitoring_location_id
 
-        const formatDateTime = (dateString: string | null | undefined): string => {
-          if (!dateString) return 'N/A'
-          return new Date(dateString).toLocaleString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          })
-        }
-
-        // Calculate data span
-        const getDataSpan = (earliest: string | null | undefined, latest: string | null | undefined): string => {
-          if (!earliest || !latest) return 'N/A'
-          const start = new Date(earliest)
-          const end = new Date(latest)
-          const diffTime = end.getTime() - start.getTime()
-          const diffYears = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 365))
-          if (diffYears > 0) return `${diffYears} year${diffYears > 1 ? 's' : ''}`
-          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
-          return `${diffDays} day${diffDays > 1 ? 's' : ''}`
-        }
-
-        new mapboxgl.Popup()
+        // Show loading popup first
+        const loadingPopup = new mapboxgl.Popup()
           .setLngLat(coordinates)
           .setHTML(`
-            <div style="font-family: Arial, sans-serif; max-width: 300px;">
+            <div style="font-family: Arial, sans-serif; max-width: 300px; text-align: center; padding: 20px;">
               <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #2c3e50;">
                 ${properties.site_name || 'Unnamed Site'}
               </h3>
-              
-              <div style="margin-bottom: 12px; padding: 8px; background-color: #f8f9fa; border-radius: 4px;">
-                <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
-                  <strong>Location ID:</strong> ${properties.monitoring_location_id || 'N/A'}
-                </div>
-                <div style="font-size: 12px; color: #666;">
-                  <strong>County:</strong> ${properties.county_code || 'N/A'} | 
-                  <strong>State:</strong> ${properties.state_code || 'N/A'}
-                </div>
+              <div style="font-size: 14px; color: #666; margin-bottom: 16px;">
+                Loading historical data...
               </div>
-
-              <div style="margin-bottom: 12px;">
-                <div style="font-size: 14px; color: #2c3e50; margin-bottom: 6px;">
-                  <strong>📊 Data Summary</strong>
-                </div>
-                <div style="font-size: 12px; color: #555; margin-bottom: 4px;">
-                  <strong>Total Measurements:</strong> ${properties.measurement_count || 0}
-                </div>
-                <div style="font-size: 12px; color: #555; margin-bottom: 4px;">
-                  <strong>Data Span:</strong> ${getDataSpan(properties.earliest_measurement, properties.latest_measurement)}
-                </div>
-                <div style="font-size: 12px; color: #555;">
-                  <strong>Variable:</strong> ${properties.variable_name || 'N/A'}
-                </div>
-              </div>
-
-              <div style="border-top: 1px solid #dee2e6; padding-top: 12px;">
-                <div style="font-size: 14px; color: #2c3e50; margin-bottom: 6px;">
-                  <strong>🕒 Latest Measurement</strong>
-                </div>
-                <div style="font-size: 12px; color: #555; margin-bottom: 4px;">
-                  <strong>Date:</strong> ${formatDateTime(properties.latest_measurement)}
-                </div>
-                <div style="font-size: 12px; color: #555; margin-bottom: 4px;">
-                  <strong>Value:</strong> ${properties.latest_value || 'N/A'} ${properties.unit || ''}
-                </div>
-                <div style="font-size: 11px; color: #888;">
-                  <strong>First Record:</strong> ${formatDate(properties.earliest_measurement)}
-                </div>
-              </div>
+              <div style="width: 24px; height: 24px; margin: 0 auto; border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+              <style>
+                @keyframes spin {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+                }
+              </style>
             </div>
           `)
           .addTo(map.current!)
+
+        try {
+          // Fetch time-series data on demand
+          const timeSeriesData = await fetchSiteTimeSeriesSummary(locationId)
+
+          // Format dates
+          const formatDate = (dateString: string | null | undefined): string => {
+            if (!dateString) return 'N/A'
+            return new Date(dateString).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric'
+            })
+          }
+
+          const formatDateTime = (dateString: string | null | undefined): string => {
+            if (!dateString) return 'N/A'
+            return new Date(dateString).toLocaleString('en-US', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })
+          }
+
+          // Calculate data span
+          const getDataSpan = (earliest: string | null | undefined, latest: string | null | undefined): string => {
+            if (!earliest || !latest) return 'N/A'
+            const start = new Date(earliest)
+            const end = new Date(latest)
+            const diffTime = end.getTime() - start.getTime()
+            const diffYears = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 365))
+            if (diffYears > 0) return `${diffYears} year${diffYears > 1 ? 's' : ''}`
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+            return `${diffDays} day${diffDays > 1 ? 's' : ''}`
+          }
+
+          // Remove loading popup
+          loadingPopup.remove()
+
+          // Show popup with loaded data
+          new mapboxgl.Popup()
+            .setLngLat(coordinates)
+            .setHTML(`
+              <div style="font-family: Arial, sans-serif; max-width: 300px;">
+                <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #2c3e50;">
+                  ${properties.site_name || 'Unnamed Site'}
+                </h3>
+                
+                <div style="margin-bottom: 12px; padding: 8px; background-color: #f8f9fa; border-radius: 4px;">
+                  <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
+                    <strong>Location ID:</strong> ${properties.monitoring_location_id || 'N/A'}
+                  </div>
+                  <div style="font-size: 12px; color: #666;">
+                    <strong>County:</strong> ${properties.county_code || 'N/A'} | 
+                    <strong>State:</strong> ${properties.state_code || 'N/A'}
+                  </div>
+                </div>
+
+                <div style="margin-bottom: 12px;">
+                  <div style="font-size: 14px; color: #2c3e50; margin-bottom: 6px;">
+                    <strong>📊 Data Summary</strong>
+                  </div>
+                  <div style="font-size: 12px; color: #555; margin-bottom: 4px;">
+                    <strong>Total Measurements:</strong> ${timeSeriesData.measurement_count || 0}
+                  </div>
+                  <div style="font-size: 12px; color: #555; margin-bottom: 4px;">
+                    <strong>Data Span:</strong> ${getDataSpan(timeSeriesData.earliest_measurement, timeSeriesData.latest_measurement)}
+                  </div>
+                  <div style="font-size: 12px; color: #555;">
+                    <strong>Variable:</strong> ${timeSeriesData.variable_name || 'N/A'}
+                  </div>
+                </div>
+
+                <div style="border-top: 1px solid #dee2e6; padding-top: 12px;">
+                  <div style="font-size: 14px; color: #2c3e50; margin-bottom: 6px;">
+                    <strong>🕒 Latest Measurement</strong>
+                  </div>
+                  <div style="font-size: 12px; color: #555; margin-bottom: 4px;">
+                    <strong>Date:</strong> ${formatDateTime(timeSeriesData.latest_measurement)}
+                  </div>
+                  <div style="font-size: 12px; color: #555; margin-bottom: 4px;">
+                    <strong>Value:</strong> ${timeSeriesData.latest_value || 'N/A'} ${timeSeriesData.unit || ''}
+                  </div>
+                  <div style="font-size: 11px; color: #888;">
+                    <strong>First Record:</strong> ${formatDate(timeSeriesData.earliest_measurement)}
+                  </div>
+                </div>
+              </div>
+            `)
+            .addTo(map.current!)
+
+        } catch (error) {
+          console.error('Error loading time-series data:', error)
+          
+          // Remove loading popup
+          loadingPopup.remove()
+          
+          // Show error popup
+          new mapboxgl.Popup()
+            .setLngLat(coordinates)
+            .setHTML(`
+              <div style="font-family: Arial, sans-serif; max-width: 300px;">
+                <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #2c3e50;">
+                  ${properties.site_name || 'Unnamed Site'}
+                </h3>
+                <div style="padding: 8px; background-color: #f8d7da; color: #721c24; border-radius: 4px;">
+                  <strong>Error loading time-series data</strong><br>
+                  Please try clicking again.
+                </div>
+              </div>
+            `)
+            .addTo(map.current!)
+        }
       })
 
       // Change cursor on hover
@@ -295,8 +340,7 @@ export function MapView() {
   }, [sites])
 
 
-  if (loading) return <div style={{ padding: '20px' }}>Loading map data...</div>
-  if (error) return <div style={{ padding: '20px', color: 'red' }}>Error: {error}</div>
+  // Don't return early - always show the full UI structure
 
   return (
     <div style={{ 
@@ -327,22 +371,42 @@ export function MapView() {
         {/* Logo/Title */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{
-            width: '32px',
-            height: '32px',
-            backgroundColor: '#3498db',
-            borderRadius: '4px',
+            width: '40px',
+            height: '40px',
+            background: 'white',
+            borderRadius: '6px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'white',
-            fontWeight: 'bold',
-            fontSize: '14px'
+            padding: '4px'
           }}>
-            GW
+            <svg width="32" height="32" viewBox="0 0 512 512" style={{ display: 'block' }}>
+              {/* Water droplet */}
+              <path d="M256 80c-88 112-128 192-128 256 0 70.7 57.3 128 128 128s128-57.3 128-128c0-64-40-144-128-256z" 
+                    fill="url(#waterGradient)" />
+              {/* Water ripples */}
+              <ellipse cx="256" cy="400" rx="180" ry="30" fill="none" stroke="#2980b9" strokeWidth="12" opacity="0.6"/>
+              <ellipse cx="256" cy="400" rx="140" ry="22" fill="none" stroke="#3498db" strokeWidth="10" opacity="0.7"/>
+              <ellipse cx="256" cy="400" rx="100" ry="16" fill="none" stroke="#5dade2" strokeWidth="8" opacity="0.8"/>
+              
+              {/* Gradient definition */}
+              <defs>
+                <linearGradient id="waterGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" style={{ stopColor: '#3498db', stopOpacity: 1 }} />
+                  <stop offset="50%" style={{ stopColor: '#2980b9', stopOpacity: 1 }} />
+                  <stop offset="100%" style={{ stopColor: '#1f5582', stopOpacity: 1 }} />
+                </linearGradient>
+              </defs>
+            </svg>
           </div>
-          <span style={{ color: 'white', fontSize: '18px', fontWeight: 'bold' }}>
-            California Groundwater Monitor
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ color: 'white', fontSize: '18px', fontWeight: 'bold', lineHeight: '1.2' }}>
+              California Groundwater Monitor
+            </span>
+            <span style={{ color: '#bdc3c7', fontSize: '12px', lineHeight: '1.2' }}>
+              Powered by water3D
+            </span>
+          </div>
         </div>
       </div>
 
@@ -366,6 +430,87 @@ export function MapView() {
             zIndex: 1
           }} 
         />
+
+        {/* Map Loading Overlay */}
+        {loading && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50, // Above map but below sidebar
+            fontSize: '16px',
+            color: '#2c3e50'
+          }}>
+            <div style={{
+              width: '48px',
+              height: '48px',
+              margin: '0 0 16px 0',
+              border: '4px solid #f3f3f3',
+              borderTop: '4px solid #3498db',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }}></div>
+            <div style={{ fontWeight: '600', marginBottom: '8px' }}>
+              Loading Groundwater Sites
+            </div>
+            <div style={{ fontSize: '14px', color: '#666' }}>
+              Fetching monitoring locations with time-series data...
+            </div>
+            <style>{`
+              @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+              }
+            `}</style>
+          </div>
+        )}
+
+        {/* Map Error Overlay */}
+        {error && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50, // Above map but below sidebar
+            fontSize: '16px',
+            color: '#e74c3c'
+          }}>
+            <div style={{
+              width: '48px',
+              height: '48px',
+              margin: '0 0 16px 0',
+              backgroundColor: '#fee',
+              border: '2px solid #e74c3c',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '24px'
+            }}>
+              ⚠️
+            </div>
+            <div style={{ fontWeight: '600', marginBottom: '8px' }}>
+              Error Loading Map Data
+            </div>
+            <div style={{ fontSize: '14px', color: '#666', textAlign: 'center', maxWidth: '400px' }}>
+              {error}
+            </div>
+          </div>
+        )}
 
         {/* Sidebar - Overlay on top of map */}
         <div style={{
@@ -486,7 +631,7 @@ export function MapView() {
         <div style={{
           position: 'absolute',
           top: '20px',
-          right: '20px',
+          right: '40px', // increased from 20px to 40px
           zIndex: 1000,
           pointerEvents: 'none'
         }}>
@@ -501,46 +646,31 @@ export function MapView() {
             border: '1px solid rgba(0,0,0,0.1)',
             pointerEvents: 'auto'
           }}>
-            <div style={{ 
-              fontWeight: '700', 
-              marginBottom: '12px', 
+            <div style={{
+              fontWeight: '700',
+              marginBottom: '12px',
               color: '#2c3e50',
               fontSize: '14px'
             }}>
-              Data Volume Legend
+              Groundwater Sites
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{ 
-                  color: '#e74c3c', 
+                <span style={{
+                  color: '#3498db',
                   marginRight: '10px',
                   fontSize: '16px',
                   lineHeight: '1'
                 }}>●</span>
-                <span style={{ color: '#2c3e50' }}>10+ measurements</span>
+                <span style={{ color: '#2c3e50' }}>Monitoring sites with time-series data</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{ 
-                  color: '#f39c12', 
-                  marginRight: '10px',
-                  fontSize: '16px',
-                  lineHeight: '1'
-                }}>●</span>
-                <span style={{ color: '#2c3e50' }}>3-10 measurements</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{ 
-                  color: '#3498db', 
-                  marginRight: '10px',
-                  fontSize: '16px',
-                  lineHeight: '1'
-                }}>●</span>
-                <span style={{ color: '#2c3e50' }}>0-3 measurements</span>
+              <div style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
+                Click any site to load measurement details
               </div>
             </div>
-            <div style={{ 
-              marginTop: '12px', 
-              paddingTop: '10px', 
+            <div style={{
+              marginTop: '12px',
+              paddingTop: '10px',
               borderTop: '1px solid #e1e8ed',
               color: '#657786',
               fontSize: '12px',
