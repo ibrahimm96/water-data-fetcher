@@ -1,9 +1,11 @@
+import type { Geometry } from 'geojson'
+
 export interface GroundwaterMonitoringSite {
   id: number
   inserted_at: string
   updated_at: string
   monitoring_location_id: string | null
-  geometry: unknown | null
+  geometry: Geometry | null
   agency_code: string | null
   monitoring_location_number: string
   monitoring_location_name: string | null
@@ -27,7 +29,7 @@ export interface GroundwaterHistoricalTimeSeries {
   county_code: string | null
   latitude: number | null
   longitude: number | null
-  geometry: unknown | null
+  geometry: Geometry | null
   variable_code: string | null
   variable_name: string | null
   variable_description: string | null
