@@ -1,32 +1,59 @@
 import { useEffect, useRef, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
-import { fetchAllSitesWithMeasurementData, fetchSiteTimeSeriesForChart, fetchSiteTimeSeriesSummary } from '../lib/supabase'
-import { TimeSeriesChart } from './TimeSeriesChart'
+import { getSitesWithHistoricalData } from '../lib/groundwater/getSitesWithHistoricalData'
+import { getSiteHistoricalChartData } from '../lib/groundwater/getSiteHistoricalChartData'
+import { getSiteHistoricalSummary } from '../lib/groundwater/getSiteHistoricalSummary'
+import type { GroundwaterMonitoringSite } from '../lib/groundwater/types'
 
-mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1IjoiaWJyYWhpbW05NiIsImEiOiJjbTZqbmF0MXQwMnJ0MmtweDQ3MXBib3o2In0.NnDfVKuzMbayFPajVsXb9g'
+// Ensure valid token
+const mapboxAccessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || ''
+if (!mapboxAccessToken) {
+  console.error('Mapbox access token is missing!')
+}
+mapboxgl.accessToken = mapboxAccessToken
 
-export function MapView() {
+interface ChartData {
+  data: Array<{ date: number; value: number; dateString: string }>
+  unit: string | null
+  variable_name: string | null
+  dateRange: { start: string; end: string } | null
+  totalPoints?: number
+}
+
+interface MapViewProps {
+  sidebarOpen: boolean
+  setSidebarOpen: (open: boolean) => void
+  setChartVisible: (visible: boolean) => void
+  setChartData: (data: ChartData | null) => void
+  setChartError: (error: string | null) => void
+  setChartLoading: (loading: boolean) => void
+  setSelectedSite: (site: { id: string; name: string } | null) => void
+}
+
+export function MapView({
+  setChartVisible,
+  setChartData,
+  setChartError,
+  setChartLoading,
+  setSelectedSite
+}: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const map = useRef<mapboxgl.Map | null>(null)
-  const [sites, setSites] = useState<any[]>([])
+  const [sites, setSites] = useState<GroundwaterMonitoringSite[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  
-  // Chart state
-  const [chartVisible, setChartVisible] = useState(false)
-  const [chartData, setChartData] = useState<any>(null)
-  const [chartLoading, setChartLoading] = useState(false)
-  const [chartError, setChartError] = useState<string | null>(null)
-  const [selectedSite, setSelectedSite] = useState<{ id: string; name: string } | null>(null)
 
+  // Load sites data
   useEffect(() => {
     const loadSites = async () => {
+      console.log('Loading sites data...')
       try {
-        const sitesData = await fetchAllSitesWithMeasurementData()
-        setSites(sitesData)
+        const data = await getSitesWithHistoricalData()
+        console.log(`Loaded ${data.length} sites`)
+        setSites(data)
       } catch (err) {
+        console.error('Failed to load sites:', err)
         setError(err instanceof Error ? err.message : 'Failed to load sites')
       } finally {
         setLoading(false)
@@ -35,717 +62,309 @@ export function MapView() {
     loadSites()
   }, [])
 
+  // Initialize map when sites are loaded
   useEffect(() => {
-    if (!mapContainer.current || map.current || !sites.length) return
+    // Guard clauses
+    if (!mapContainer.current) {
+      console.log('Map container not available')
+      return
+    }
+    
+    if (map.current) {
+      console.log('Map already initialized')
+      return
+    }
+    
+    if (!sites.length) {
+      console.log('No sites available yet')
+      return
+    }
 
-    // Initialize map centered on California
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/streets-v12',
-      center: [-119.4179, 36.7783], // California center
-      zoom: 6
-    })
+    console.log('Initializing map...')
+    
+    try {
+      const newMap = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: 'mapbox://styles/mapbox/streets-v12',
+        center: [-119.4179, 36.7783],
+        zoom: 6,
+        attributionControl: true
+      })
 
-    // Add navigation controls
-    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right')
+      // Handle map load event
+      newMap.on('load', () => {
+        console.log('Map loaded successfully')
+        
+        try {
+          // Create GeoJSON data
+          const validSites = sites.filter(site => site.geometry?.type === 'Point')
+          console.log(`Valid sites with geometry: ${validSites.length} out of ${sites.length}`)
+          
+          if (!validSites.length) {
+            console.error('No valid sites with point geometry found!')
+            return
+          }
 
-    // Wait for map to load before adding data
-    map.current.on('load', () => {
-      // Prepare GeoJSON data for clustering
-      const geojsonData: GeoJSON.FeatureCollection = {
-        type: 'FeatureCollection',
-        features: sites
-          .filter(site => site.latitude && site.longitude)
-          .map(site => ({
-            type: 'Feature' as const,
-            properties: {
-              monitoring_location_id: site.monitoring_location_id,
-              site_name: site.site_name,
-              county_code: site.county_code,
-              state_code: site.state_code,
-              measurement_count: site.measurement_count,
-              latest_measurement: site.latest_measurement,
-              earliest_measurement: site.earliest_measurement,
-              latest_value: site.latest_value,
-              unit: site.unit,
-              variable_name: site.variable_name
-            },
-            geometry: {
-              type: 'Point' as const,
-              coordinates: [site.longitude, site.latitude]
+          const geojson: GeoJSON.FeatureCollection = {
+            type: 'FeatureCollection',
+            features: validSites.map(site => ({
+              type: 'Feature' as const,
+              geometry: site.geometry as GeoJSON.Geometry,
+              properties: {
+                monitoring_location_id: site.monitoring_location_id,
+                monitoring_location_name: site.monitoring_location_name || 'Unnamed Site',
+                county_code: site.county_code,
+                state_code: site.state_code,
+              }
+            }))
+          }
+
+          // Add source
+          newMap.addSource('sites', {
+            type: 'geojson',
+            data: geojson,
+            cluster: true,
+            clusterRadius: 30
+          })
+
+          // Add cluster layer
+          newMap.addLayer({
+            id: 'clusters',
+            type: 'circle',
+            source: 'sites',
+            filter: ['has', 'point_count'],
+            paint: {
+              'circle-color': [
+                'step', 
+                ['get', 'point_count'], 
+                '#51bbd6',   // color for point_count < 10
+                10, 
+                '#f1f075',   // color for point_count >= 10 and < 100
+                100, 
+                '#f28cb1'    // color for point_count >= 100
+              ],
+              'circle-radius': [
+                'step', 
+                ['get', 'point_count'], 
+                20,   // size for point_count < 10
+                10, 
+                30,   // size for point_count >= 10 and < 100
+                100, 
+                40    // size for point_count >= 100
+              ]
             }
-          }))
-      }
+          })
 
-      // Add source for clustering
-      map.current!.addSource('sites', {
-        type: 'geojson',
-        data: geojsonData,
-        cluster: true,
-        clusterMaxZoom: 10, // Max zoom to cluster points on (reduced from 14)
-        clusterRadius: 30 // Radius of each cluster when clustering points (reduced from 50)
-      })
+          // Add cluster count layer
+          newMap.addLayer({
+            id: 'cluster-count',
+            type: 'symbol',
+            source: 'sites',
+            filter: ['has', 'point_count'],
+            layout: {
+              'text-field': '{point_count_abbreviated}',
+              'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
+              'text-size': 12
+            }
+          })
 
-      // Add cluster circles
-      map.current!.addLayer({
-        id: 'clusters',
-        type: 'circle',
-        source: 'sites',
-        filter: ['has', 'point_count'],
-        paint: {
-          'circle-color': [
-            'step',
-            ['get', 'point_count'],
-            '#51bbd6', // Color for clusters with < 10 points
-            10,
-            '#f1f075', // Color for clusters with 10-100 points
-            100,
-            '#f28cb1'  // Color for clusters with > 100 points
-          ],
-          'circle-radius': [
-            'step',
-            ['get', 'point_count'],
-            20, // Radius for clusters with < 10 points
-            10,
-            30, // Radius for clusters with 10-100 points
-            100,
-            40  // Radius for clusters with > 100 points
-          ]
-        }
-      })
+          // Add individual point layer with improved visibility
+          newMap.addLayer({
+            id: 'unclustered-point',
+            type: 'circle',
+            source: 'sites',
+            filter: ['!', ['has', 'point_count']],
+            paint: {
+              'circle-color': '#3498db',
+              'circle-radius': 8, // Larger for better visibility
+              'circle-stroke-width': 2,
+              'circle-stroke-color': '#ffffff'
+            }
+          })
 
-      // Add cluster count labels
-      map.current!.addLayer({
-        id: 'cluster-count',
-        type: 'symbol',
-        source: 'sites',
-        filter: ['has', 'point_count'],
-        layout: {
-          'text-field': ['get', 'point_count_abbreviated'],
-          'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
-          'text-size': 12
-        }
-      })
+          // Fit map bounds to show all points
+          if (geojson.features.length > 0) {
+            const bounds = new mapboxgl.LngLatBounds()
+            geojson.features.forEach(feature => {
+              const coords = (feature.geometry as GeoJSON.Point).coordinates as [number, number]
+              bounds.extend(coords)
+            })
+            newMap.fitBounds(bounds, { padding: 50 })
+          }
 
-      // Add individual points (unclustered) with color-coding based on measurement count
-      map.current!.addLayer({
-        id: 'unclustered-point',
-        type: 'circle',
-        source: 'sites',
-        filter: ['!', ['has', 'point_count']],
-        paint: {
-          'circle-color': [
-            'case',
-            ['>=', ['get', 'measurement_count'], 10], '#e74c3c', // Red for 10+ measurements
-            ['>=', ['get', 'measurement_count'], 3], '#f39c12', // Yellow/orange for 3-9 measurements
-            '#3498db' // Blue for 0-2 measurements
-          ],
-          'circle-radius': 6,
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#fff'
-        }
-      })
+          // Setup click handler for points
+          newMap.on('click', 'unclustered-point', async (e) => {
+            if (!e.features || !e.features[0]) {
+              console.log('No feature clicked')
+              return
+            }
+            
+            const feature = e.features[0]
+            const props = feature.properties
+            const coords = (feature.geometry as GeoJSON.Point).coordinates as [number, number]
 
-      // Click event for clusters
-      map.current!.on('click', 'clusters', (e) => {
-        const features = map.current!.queryRenderedFeatures(e.point, {
-          layers: ['clusters']
-        })
-        if (features && features.length > 0) {
-          const clusterId = features[0].properties?.cluster_id
-          const source = map.current!.getSource('sites') as mapboxgl.GeoJSONSource
-          if (source && clusterId) {
-            source.getClusterExpansionZoom(clusterId, (err: any, zoom: any) => {
-              if (err) return
-              const geometry = features[0].geometry as GeoJSON.Point
-              map.current!.easeTo({
-                center: geometry.coordinates as [number, number],
-                zoom: zoom
+            if (!props) {
+              console.error('Feature has no properties')
+              return
+            }
+
+            const siteId = props.monitoring_location_id || ''
+            const siteName = props.monitoring_location_name || 'Unnamed Site'
+            
+            console.log(`Clicked site: ${siteName} (${siteId})`)
+
+            // Zoom to clicked point
+            newMap.easeTo({
+              center: coords,
+              zoom: Math.max(newMap.getZoom(), 12),
+              duration: 1000,
+              padding: { top: 50, bottom: 50, left: 50, right: 350 }
+            })
+
+            // Show loading popup
+            const loadingPopup = new mapboxgl.Popup()
+              .setLngLat(coords)
+              .setHTML(`<div style="text-align:center; padding: 10px;">Loading data for ${siteName}...</div>`)
+              .addTo(newMap)
+
+            try {
+              // Update chart state
+              setSelectedSite({ id: siteId, name: siteName })
+              setChartVisible(true)
+              setChartLoading(true)
+              setChartError(null)
+              setChartData(null)
+
+              // Fetch data
+              console.log(`Fetching historical data for site ${siteId}...`)
+              const [, chart] = await Promise.all([
+                getSiteHistoricalSummary(siteId),
+                getSiteHistoricalChartData(siteId)
+              ])
+              console.log('Historical data fetched successfully')
+
+              // Update state with fetched data
+              setChartData(chart)
+              setChartLoading(false)
+              loadingPopup.remove()
+            } catch (err) {
+              console.error('Failed to load historical data:', err)
+              setChartError(err instanceof Error ? err.message : 'Failed to load data')
+              setChartLoading(false)
+              loadingPopup.remove()
+              
+              // Show error popup
+              new mapboxgl.Popup()
+                .setLngLat(coords)
+                .setHTML(`<div style="color:red; padding: 10px;">Failed to load data</div>`)
+                .addTo(newMap)
+            }
+          })
+
+          // Setup cluster click handler
+          newMap.on('click', 'clusters', (e) => {
+            const features = newMap.queryRenderedFeatures(e.point, { layers: ['clusters'] })
+            if (!features.length) return
+            
+            const clusterId = features[0].properties?.cluster_id
+            const source = newMap.getSource('sites') as mapboxgl.GeoJSONSource
+            
+            source.getClusterExpansionZoom(clusterId, (err, zoom) => {
+              if (err || zoom == null) return
+
+              const coordinates = (features[0].geometry as GeoJSON.Point).coordinates
+              newMap.easeTo({
+                center: coordinates as [number, number],
+                zoom // now guaranteed to be number
               })
             })
-          }
-        }
-      })
+          })
 
-
-      map.current!.on('click', 'unclustered-point', async (e) => {
-        if (!e.features || e.features.length === 0) return
-        
-        const feature = e.features[0]
-        const geometry = feature.geometry as GeoJSON.Point
-        const coordinates = geometry.coordinates.slice() as [number, number]
-        const properties = feature.properties
-
-        if (!properties) return
-
-        const locationId = properties.monitoring_location_id
-        
-        map.current!.easeTo({
-          center: coordinates,
-          zoom: Math.max(map.current!.getZoom(), 12), // Zoom to at least level 12
-          duration: 1000, // Animation duration in milliseconds
-          padding: { top: 50, bottom: 50, left: 50, right: 350 } // Add padding to account for sidebar/chart
-        })
-
-        // Show loading popup first
-        const loadingPopup = new mapboxgl.Popup()
-          .setLngLat(coordinates)
-          .setHTML(`
-            <div style="font-family: Arial, sans-serif; max-width: 300px; text-align: center; padding: 20px;">
-              <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #2c3e50;">
-                ${properties.site_name || 'Unnamed Site'}
-              </h3>
-              <div style="font-size: 14px; color: #666; margin-bottom: 16px;">
-                Loading historical data...
-              </div>
-              <div style="width: 24px; height: 24px; margin: 0 auto; border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-              <style>
-                @keyframes spin {
-                  0% { transform: rotate(0deg); }
-                  100% { transform: rotate(360deg); }
-                }
-              </style>
-            </div>
-          `)
-          .addTo(map.current!)
-
-        try {
-          // Set up chart state
-          const siteName = properties.site_name || 'Unnamed Site'
-          setSelectedSite({ id: locationId, name: siteName })
-          setChartVisible(true)
-          setChartLoading(true)
-          setChartError(null)
-          setChartData(null)
-
-          // Fetch both summary and chart data
-          const [timeSeriesData, chartTimeSeriesData] = await Promise.all([
-            fetchSiteTimeSeriesSummary(locationId),
-            fetchSiteTimeSeriesForChart(locationId)
-          ])
-
-          // Update chart state
-          setChartData(chartTimeSeriesData)
-          setChartLoading(false)
-
-          // Format dates and calculate span
-          const formatDate = (dateString: string | null | undefined): string => {
-            if (!dateString) return 'N/A'
-            return new Date(dateString).toLocaleDateString('en-US', {
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric'
-            })
-          }
-
-          const formatDateTime = (dateString: string | null | undefined): string => {
-            if (!dateString) return 'N/A'
-            return new Date(dateString).toLocaleString('en-US', {
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            })
-          }
-
-          const getDataSpan = (earliest: string | null | undefined, latest: string | null | undefined): string => {
-            if (!earliest || !latest) return 'N/A'
-            const start = new Date(earliest)
-            const end = new Date(latest)
-            const diffTime = end.getTime() - start.getTime()
-            const diffYears = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 365))
-            if (diffYears > 0) return `${diffYears} year${diffYears > 1 ? 's' : ''}`
-            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
-            return `${diffDays} day${diffDays > 1 ? 's' : ''}`
-          }
-
-          // Remove loading popup and show data popup
-          loadingPopup.remove()
-          new mapboxgl.Popup()
-            .setLngLat(coordinates)
-            .setHTML(`
-              <div style="font-family: Arial, sans-serif; max-width: 300px;">
-                <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #2c3e50;">
-                  ${properties.site_name || 'Unnamed Site'}
-                </h3>
-                
-                <div style="margin-bottom: 12px; padding: 8px; background-color: #f8f9fa; border-radius: 4px;">
-                  <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
-                    <strong>Location ID:</strong> ${properties.monitoring_location_id || 'N/A'}
-                  </div>
-                  <div style="font-size: 12px; color: #666;">
-                    <strong>County:</strong> ${properties.county_code || 'N/A'} | 
-                    <strong>State:</strong> ${properties.state_code || 'N/A'}
-                  </div>
-                </div>
-
-                <div style="margin-bottom: 12px;">
-                  <div style="font-size: 14px; color: #2c3e50; margin-bottom: 6px;">
-                    <strong>📊 Data Summary</strong>
-                  </div>
-                  <div style="font-size: 12px; color: #555; margin-bottom: 4px;">
-                    <strong>Total Measurements:</strong> ${timeSeriesData.measurement_count || 0}
-                  </div>
-                  <div style="font-size: 12px; color: #555; margin-bottom: 4px;">
-                    <strong>Data Span:</strong> ${getDataSpan(timeSeriesData.earliest_measurement, timeSeriesData.latest_measurement)}
-                  </div>
-                  <div style="font-size: 12px; color: #555;">
-                    <strong>Variable:</strong> ${timeSeriesData.variable_name || 'N/A'}
-                  </div>
-                </div>
-
-                <div style="border-top: 1px solid #dee2e6; padding-top: 12px;">
-                  <div style="font-size: 14px; color: #2c3e50; margin-bottom: 6px;">
-                    <strong>🕒 Latest Measurement</strong>
-                  </div>
-                  <div style="font-size: 12px; color: #555; margin-bottom: 4px;">
-                    <strong>Date:</strong> ${formatDateTime(timeSeriesData.latest_measurement)}
-                  </div>
-                  <div style="font-size: 12px; color: #555; margin-bottom: 4px;">
-                    <strong>Value:</strong> ${timeSeriesData.latest_value || 'N/A'} ${timeSeriesData.unit || ''}
-                  </div>
-                  <div style="font-size: 11px; color: #888;">
-                    <strong>First Record:</strong> ${formatDate(timeSeriesData.earliest_measurement)}
-                  </div>
-                </div>
-              </div>
-            `)
-            .addTo(map.current!)
-
-        } catch (error) {
-          console.error('Error loading data:', error)
-          loadingPopup.remove()
+          // Cursor styling
+          newMap.on('mouseenter', 'unclustered-point', () => {
+            newMap.getCanvas().style.cursor = 'pointer'
+          })
           
-          new mapboxgl.Popup()
-            .setLngLat(coordinates)
-            .setHTML(`
-              <div style="font-family: Arial, sans-serif; max-width: 300px;">
-                <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #2c3e50;">
-                  ${properties.site_name || 'Unnamed Site'}
-                </h3>
-                <div style="padding: 8px; background-color: #f8d7da; color: #721c24; border-radius: 4px;">
-                  <strong>Error loading data</strong><br>
-                  Please try clicking again.
-                </div>
-              </div>
-            `)
-            .addTo(map.current!)
-
-          setChartError(error instanceof Error ? error.message : 'Failed to load chart data')
-          setChartLoading(false)
+          newMap.on('mouseleave', 'unclustered-point', () => {
+            newMap.getCanvas().style.cursor = ''
+          })
+          
+          newMap.on('mouseenter', 'clusters', () => {
+            newMap.getCanvas().style.cursor = 'pointer'
+          })
+          
+          newMap.on('mouseleave', 'clusters', () => {
+            newMap.getCanvas().style.cursor = ''
+          })
+          
+          console.log('Map setup completed successfully')
+          
+        } catch (setupError) {
+          console.error('Error setting up map layers:', setupError)
+          setError(`Error setting up map: ${setupError instanceof Error ? setupError.message : 'Unknown error'}`)
         }
       })
 
-      // Change cursor on hover
-      map.current!.on('mouseenter', 'clusters', () => {
-        map.current!.getCanvas().style.cursor = 'pointer'
-      })
-      map.current!.on('mouseleave', 'clusters', () => {
-        map.current!.getCanvas().style.cursor = ''
-      })
-      map.current!.on('mouseenter', 'unclustered-point', () => {
-        map.current!.getCanvas().style.cursor = 'pointer'
-      })
-      map.current!.on('mouseleave', 'unclustered-point', () => {
-        map.current!.getCanvas().style.cursor = ''
+      // Handle map errors
+      newMap.on('error', (e) => {
+        console.error('Mapbox error:', e)
+        setError(`Map error: ${e.error?.message || 'Unknown error'}`)
       })
 
-      // Fit map to show all markers
-      if (geojsonData.features.length > 0) {
-        const bounds = new mapboxgl.LngLatBounds()
-        geojsonData.features.forEach(feature => {
-          const geometry = feature.geometry as GeoJSON.Point
-          bounds.extend(geometry.coordinates as [number, number])
-        })
-        map.current!.fitBounds(bounds, { padding: 50 })
-      }
-    })
+      // Add navigation controls
+      newMap.addControl(new mapboxgl.NavigationControl(), 'top-right')
+      
+      // Store map reference
+      map.current = newMap
+      
+    } catch (mapError) {
+      console.error('Failed to initialize map:', mapError)
+      setError(`Failed to initialize map: ${mapError instanceof Error ? mapError.message : 'Unknown error'}`)
+    }
 
+    // Cleanup function
     return () => {
       if (map.current) {
+        console.log('Cleaning up map')
         map.current.remove()
         map.current = null
       }
     }
-  }, [sites])
+  }, [sites, setChartData, setChartError, setChartLoading, setChartVisible, setSelectedSite])
 
+  // Add loading overlay
+  if (loading) {
+    return (
+      <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'white' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div>Loading map data...</div>
+        </div>
+      </div>
+    )
+  }
 
-  // Don't return early - always show the full UI structure
+  // Show error if one occurred
+  if (error) {
+    return (
+      <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'white' }}>
+        <div style={{ textAlign: 'center', color: 'red' }}>
+          <div>Error: {error}</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div style={{ 
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      height: '100%',
-      width: '100%',
-      display: 'flex',
-      flexDirection: 'column',
-      margin: 0,
-      padding: 0,
-      overflow: 'hidden'
-    }}>
-      {/* Top Banner */}
-      <div style={{
-        height: '60px',
-        backgroundColor: '#2c3e50',
-        display: 'flex',
-        alignItems: 'center',
-        padding: '0 20px',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-        zIndex: 1000,
-        flexShrink: 0
-      }}>
-        {/* Logo/Title */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: '40px',
-            height: '40px',
-            background: 'white',
-            borderRadius: '6px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '4px'
-          }}>
-            <svg width="32" height="32" viewBox="0 0 512 512" style={{ display: 'block' }}>
-              {/* Water droplet */}
-              <path d="M256 80c-88 112-128 192-128 256 0 70.7 57.3 128 128 128s128-57.3 128-128c0-64-40-144-128-256z" 
-                    fill="url(#waterGradient)" />
-              {/* Water ripples */}
-              <ellipse cx="256" cy="400" rx="180" ry="30" fill="none" stroke="#2980b9" strokeWidth="12" opacity="0.6"/>
-              <ellipse cx="256" cy="400" rx="140" ry="22" fill="none" stroke="#3498db" strokeWidth="10" opacity="0.7"/>
-              <ellipse cx="256" cy="400" rx="100" ry="16" fill="none" stroke="#5dade2" strokeWidth="8" opacity="0.8"/>
-              
-              {/* Gradient definition */}
-              <defs>
-                <linearGradient id="waterGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" style={{ stopColor: '#3498db', stopOpacity: 1 }} />
-                  <stop offset="50%" style={{ stopColor: '#2980b9', stopOpacity: 1 }} />
-                  <stop offset="100%" style={{ stopColor: '#1f5582', stopOpacity: 1 }} />
-                </linearGradient>
-              </defs>
-            </svg>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ color: 'white', fontSize: '18px', fontWeight: 'bold', lineHeight: '1.2' }}>
-              California Groundwater Monitor
-            </span>
-            <span style={{ color: '#bdc3c7', fontSize: '12px', lineHeight: '1.2' }}>
-              Powered by water3D
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content Area */}
-      <div style={{ 
-        flex: 1,
-        position: 'relative',
-        height: 'calc(100% - 60px)'
-      }}>
-        {/* Map Container - Full width underneath everything */}
-        <div 
-          ref={mapContainer}
-          style={{ 
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            width: '100%',
-            height: '100%',
-            zIndex: 1
-          }} 
-        />
-
-        {/* Map Loading Overlay */}
-        {loading && (
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(255, 255, 255, 0.9)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 50, // Above map but below sidebar
-            fontSize: '16px',
-            color: '#2c3e50'
-          }}>
-            <div style={{
-              width: '48px',
-              height: '48px',
-              margin: '0 0 16px 0',
-              border: '4px solid #f3f3f3',
-              borderTop: '4px solid #3498db',
-              borderRadius: '50%',
-              animation: 'spin 1s linear infinite'
-            }}></div>
-            <div style={{ fontWeight: '600', marginBottom: '8px' }}>
-              Loading Groundwater Sites
-            </div>
-            <div style={{ fontSize: '14px', color: '#666' }}>
-              Fetching monitoring locations with time-series data...
-            </div>
-            <style>{`
-              @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-              }
-            `}</style>
-          </div>
-        )}
-
-        {/* Map Error Overlay */}
-        {error && (
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(255, 255, 255, 0.95)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 50, // Above map but below sidebar
-            fontSize: '16px',
-            color: '#e74c3c'
-          }}>
-            <div style={{
-              width: '48px',
-              height: '48px',
-              margin: '0 0 16px 0',
-              backgroundColor: '#fee',
-              border: '2px solid #e74c3c',
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '24px'
-            }}>
-              ⚠️
-            </div>
-            <div style={{ fontWeight: '600', marginBottom: '8px' }}>
-              Error Loading Map Data
-            </div>
-            <div style={{ fontSize: '14px', color: '#666', textAlign: 'center', maxWidth: '400px' }}>
-              {error}
-            </div>
-          </div>
-        )}
-
-        {/* Sidebar - Overlay on top of map */}
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: sidebarOpen ? '300px' : '0px',
-          height: '100%',
-          backgroundColor: '#34495e',
-          transition: 'width 0.3s ease',
-          overflow: 'hidden',
-          boxShadow: sidebarOpen ? '2px 0 4px rgba(0,0,0,0.1)' : 'none',
-          zIndex: 100
-        }}>
-          {/* Sidebar Header */}
-          <div style={{
-            padding: '16px 20px',
-            borderBottom: '1px solid #2c3e50',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between'
-          }}>
-            <h3 style={{ 
-              color: 'white', 
-              margin: 0, 
-              fontSize: '16px',
-              fontWeight: '600'
-            }}>
-              Map Layers
-            </h3>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#bdc3c7',
-                fontSize: '18px',
-                cursor: 'pointer',
-                padding: '4px',
-                borderRadius: '4px'
-              }}
-            >
-              ✕
-            </button>
-          </div>
-
-          {/* Sidebar Content */}
-          <div style={{ padding: '20px' }}>
-            {/* Map Layer Selection */}
-            <div>
-              <h4 style={{ 
-                color: '#ecf0f1', 
-                fontSize: '12px', 
-                fontWeight: '600',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                margin: '0 0 12px 0'
-              }}>
-                Map Layer Selection
-              </h4>
-              <div style={{
-                backgroundColor: '#2c3e50',
-                borderRadius: '4px',
-                overflow: 'hidden'
-              }}>
-                <label style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '12px 16px',
-                  cursor: 'pointer',
-                  borderBottom: '1px solid #34495e'
-                }}>
-                  <input
-                    type="checkbox"
-                    defaultChecked
-                    style={{
-                      marginRight: '12px',
-                      transform: 'scale(1.2)'
-                    }}
-                  />
-                  <span style={{
-                    color: '#ecf0f1',
-                    fontSize: '14px'
-                  }}>
-                    Groundwater Historical Sites
-                  </span>
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Sidebar Toggle Button (when closed) */}
-        {!sidebarOpen && (
-          <button
-            onClick={() => setSidebarOpen(true)}
-            style={{
-              position: 'absolute',
-              left: '10px',
-              top: '10px',
-              zIndex: 200,
-              backgroundColor: '#34495e',
-              border: 'none',
-              borderRadius: '4px',
-              padding: '8px 12px',
-              color: 'white',
-              cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-              fontSize: '14px',
-              fontWeight: '500'
-            }}
-          >
-            ☰ Map Layers
-          </button>
-        )}
-
-        {/* Map Controls Overlay */}
-        <div style={{
-          position: 'absolute',
-          top: '20px',
-          right: '40px', // increased from 20px to 40px
-          zIndex: 1000,
-          pointerEvents: 'none'
-        }}>
-          {/* Legend */}
-          <div style={{
-            backgroundColor: 'rgba(255,255,255,0.95)',
-            borderRadius: '6px',
-            padding: '16px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            fontSize: '13px',
-            minWidth: '220px',
-            border: '1px solid rgba(0,0,0,0.1)',
-            pointerEvents: 'auto'
-          }}>
-            <div style={{
-              fontWeight: '700',
-              marginBottom: '12px',
-              color: '#2c3e50',
-              fontSize: '14px'
-            }}>
-              Groundwater Sites
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{
-                  color: '#e74c3c',
-                  marginRight: '10px',
-                  fontSize: '16px',
-                  lineHeight: '1'
-                }}>●</span>
-                <span style={{ color: '#2c3e50' }}>10+ measurements</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{
-                  color: '#f39c12',
-                  marginRight: '10px',
-                  fontSize: '16px',
-                  lineHeight: '1'
-                }}>●</span>
-                <span style={{ color: '#2c3e50' }}>3-9 measurements</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{
-                  color: '#3498db',
-                  marginRight: '10px',
-                  fontSize: '16px',
-                  lineHeight: '1'
-                }}>●</span>
-                <span style={{ color: '#2c3e50' }}>0-2 measurements</span>
-              </div>
-              <div style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
-                Click any site to view time-series chart
-              </div>
-            </div>
-            <div style={{
-              marginTop: '12px',
-              paddingTop: '10px',
-              borderTop: '1px solid #e1e8ed',
-              color: '#657786',
-              fontSize: '12px',
-              fontWeight: '500'
-            }}>
-              Total sites: {sites.length}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Time Series Chart Component */}
-      <TimeSeriesChart
-        siteId={selectedSite?.id || ''}
-        siteName={selectedSite?.name || ''}
-        isVisible={chartVisible}
-        onClose={() => {
-          setChartVisible(false)
-          setSelectedSite(null)
-          setChartData(null)
-          setChartError(null)
-        }}
-        chartData={chartData}
-        isLoading={chartLoading}
-        error={chartError}
-      />
-    </div>
-  );
+    <div 
+      ref={mapContainer} 
+      style={{ 
+        position: 'absolute', 
+        top: 0, 
+        bottom: 0, 
+        left: 0, 
+        right: 0, 
+        zIndex: 1 
+      }} 
+    />
+  )
 }
