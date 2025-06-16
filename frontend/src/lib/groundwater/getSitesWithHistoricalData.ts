@@ -12,7 +12,7 @@ export const getSitesWithHistoricalData = async (): Promise<SiteWithCount[]> => 
 
   while (hasMore) {
     const { data: batch, error } = await supabase
-      .from('gw_sites_with_time_series_data')
+      .from('gw_sites_with_historical_data')
       .select('monitoring_location_number, monitoring_location_name, state_code, county_code, geometry, agency_code')
       .range(offset, offset + batchSize - 1)
       .order('monitoring_location_number')
@@ -56,7 +56,7 @@ export const getSitesWithHistoricalData = async (): Promise<SiteWithCount[]> => 
   }
 
   const { data: measurements, error: countError } = await supabase
-    .from('groundwater_time_series')
+    .from('gw_historical_timeseries')
     .select('monitoring_location_number')
     .eq('variable_code', '72019')
     .not('measurement_datetime', 'is', null)

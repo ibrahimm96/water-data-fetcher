@@ -2,7 +2,7 @@ import { supabase } from '../client'
 
 export const getSiteHistoricalSummary = async (locationId: string) => {
   const { data: latest, error, count } = await supabase
-    .from('groundwater_time_series')
+    .from('gw_historical_timeseries')
     .select('measurement_datetime, measurement_value, unit, variable_name', { count: 'exact' })
     .eq('monitoring_location_number', locationId)
     .eq('variable_code', '72019')
@@ -16,7 +16,7 @@ export const getSiteHistoricalSummary = async (locationId: string) => {
   let earliest = null
   if ((count ?? 0) > 1) {
     const { data } = await supabase
-      .from('groundwater_time_series')
+      .from('gw_historical_timeseries')
       .select('measurement_datetime')
       .eq('monitoring_location_number', locationId)
       .eq('variable_code', '72019')

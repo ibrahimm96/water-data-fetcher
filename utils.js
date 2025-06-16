@@ -32,7 +32,13 @@ export function getDateRanges(startDate, endDate, chunkMonths = 12) {
 export async function fetchWithRetry(url, maxRetries = 3, delay = 1000) {
   for (let i = 0; i < maxRetries; i++) {
     try {
-      const response = await fetch(url);
+      console.log(`Attempt ${i + 1}/${maxRetries} for ${url}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
+      
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      
       if (!response.ok) {
         throw new Error(`HTTP ${response.status} - ${response.statusText}`);
       }
@@ -98,7 +104,8 @@ export async function processCountyInBatches(counties, processFn, batchSize = 5)
     
     // Add delay between batches to be respectful to USGS API
     if (i + batchSize < counties.length) {
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      console.log(`Waiting 10 seconds before next county...`);
+      await new Promise(resolve => setTimeout(resolve, 10000));
     }
   }
   
@@ -109,8 +116,8 @@ export async function upsertTimeSeriesData(supabase, timeSeriesData) {
   const { data, error } = await supabase
     .from('groundwater_time_series')
     .upsert(timeSeriesData, {
-      onConflict: 'monitoring_location_id,measurement_datetime,variable_code',
-      ignoreDuplicates: false
+      onConflict: 'monitoring_location_number,measurement_datetime,variable_code',
+      ignoreDuplicates: true
     });
     
   if (error) {
@@ -119,4 +126,36 @@ export async function upsertTimeSeriesData(supabase, timeSeriesData) {
   }
   
   return data;
+}
+
+export async function upsertHistoricalTimeSeriesData(supabase, timeSeriesData) {
+  // Get current count before insert
+  const { count: beforeCount } = await supabase
+    .from('gw_historical_timeseries')
+    .select('*', { count: 'exact', head: true });
+    
+  const { data, error } = await supabase
+    .from('gw_historical_timeseries')
+    .upsert(timeSeriesData, {
+      onConflict: 'monitoring_location_number,measurement_datetime,variable_code',
+      ignoreDuplicates: true
+    });
+    
+  if (error) {
+    console.error('Historical upsert error:', error.message);
+    throw error;
+  }
+  
+  // Get count after insert to show actual new records
+  const { count: afterCount } = await supabase
+    .from('gw_historical_timeseries')
+    .select('*', { count: 'exact', head: true });
+    
+  const actualInserted = (afterCount || 0) - (beforeCount || 0);
+  
+  return { 
+    data, 
+    attempted: timeSeriesData.length, 
+    actuallyInserted: actualInserted 
+  };
 }

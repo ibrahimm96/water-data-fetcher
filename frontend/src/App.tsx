@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { MapView } from './components/MapView'
 import { Sidebar } from './components/Sidebar'
-import { TimeSeriesChart } from './components/TimeSeriesChart'
+import { TimeSeriesChart } from './components/TimeSeriesGraph'
 import './App.css'
 
 function App() {
@@ -11,6 +11,14 @@ function App() {
   const [chartData, setChartData] = useState<any>(null)
   const [chartLoading, setChartLoading] = useState(false)
   const [chartError, setChartError] = useState<string | null>(null)
+
+  const [measurementFilter, setMeasurementFilter] = useState<{
+    min: number
+    max: number | null
+  }>({
+    min: 0,
+    max: null
+  })
 
   return (
     <div style={{
@@ -59,46 +67,47 @@ function App() {
               </defs>
             </svg>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ color: 'white', fontSize: '18px', fontWeight: 'bold' }}>California Groundwater Monitor</span>
-            <span style={{ color: '#bdc3c7', fontSize: '12px' }}>Powered by water3D</span>
-          </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+              <span style={{ color: 'white', fontSize: '18px', fontWeight: 'bold' }}>water3D</span>
+              <span style={{ color: '#bdc3c7', fontSize: '12px' }}>Water Monitoring Site Visualization Tool</span>
+            </div>
         </div>
       </div>
 
       {/* Main Content */}
       <div style={{ flex: 1, position: 'relative' }}>
         {/* Sidebar */}
-        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-
-        {/* Sidebar toggle button */}
+        <Sidebar
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          measurementFilter={measurementFilter}
+          onMeasurementFilterChange={setMeasurementFilter}
+        />
         {!sidebarOpen && (
           <button
             onClick={() => setSidebarOpen(true)}
             style={{
               position: 'absolute',
-              left: '10px',
-              top: '10px',
+              top: '20px',
+              left: '20px',
               zIndex: 200,
+              padding: '12px 16px',
               backgroundColor: '#34495e',
+              color: 'white',
               border: 'none',
               borderRadius: '4px',
-              padding: '8px 12px',
-              color: 'white',
-              cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
               fontSize: '14px',
-              fontWeight: '500'
+              fontWeight: '600',
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
             }}
           >
             ☰ Map Layers
           </button>
         )}
 
-        {/* Map */}
         <MapView
-          sidebarOpen={sidebarOpen}
-          setSidebarOpen={setSidebarOpen}
+          measurementFilter={measurementFilter}
           setChartVisible={setChartVisible}
           setChartData={setChartData}
           setChartError={setChartError}
@@ -106,7 +115,6 @@ function App() {
           setSelectedSite={setSelectedSite}
         />
 
-        {/* Chart */}
         <TimeSeriesChart
           siteId={selectedSite?.id || ''}
           siteName={selectedSite?.name || ''}
@@ -127,3 +135,4 @@ function App() {
 }
 
 export default App
+

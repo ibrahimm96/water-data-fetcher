@@ -120,7 +120,7 @@ export function TimeSeriesChart({
             fontWeight: '600',
             color: '#2c3e50'
           }}>
-            {siteName || 'Unnamed Site'}
+            Site Name: {siteName || 'Unnamed Site'}
           </h3>
           <div style={{
             fontSize: '12px',

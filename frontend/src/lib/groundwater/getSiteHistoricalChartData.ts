@@ -2,13 +2,14 @@ import { supabase } from '../client'
 
 export const getSiteHistoricalChartData = async (locationId: string) => {
   const { data, error } = await supabase
-    .from('groundwater_time_series')
+    .from('gw_historical_timeseries')
     .select('measurement_datetime, measurement_value, unit, variable_name')
     .eq('monitoring_location_number', locationId)
     .eq('variable_code', '72019')
     .not('measurement_datetime', 'is', null)
     .not('measurement_value', 'is', null)
     .order('measurement_datetime', { ascending: true })
+    .limit(10000)
 
   if (error) throw error
 
