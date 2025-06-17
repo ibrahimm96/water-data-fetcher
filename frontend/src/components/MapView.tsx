@@ -34,14 +34,6 @@ export function MapView({
       try {
         const data = await getSitesWithHistoricalData()
         setSites(data)
-        
-        // Initialize filtered count immediately after loading sites
-        const initialFiltered = data.filter(site => {
-          const count = site.measurement_count || 0
-          return count >= measurementFilter.min && 
-                 (measurementFilter.max === null || count <= measurementFilter.max)
-        })
-        setFilteredSiteCount(initialFiltered.length)
       } catch (err) {
         console.error('Failed to load sites:', err)
         setError(err instanceof Error ? err.message : 'Failed to load sites')
@@ -50,7 +42,7 @@ export function MapView({
       }
     }
     loadSites()
-  }, [measurementFilter.min, measurementFilter.max, setFilteredSiteCount])
+  }, []) // Only load sites once on mount
 
   useEffect(() => {
     const filtered = sites.filter(site => {
@@ -63,7 +55,7 @@ export function MapView({
   }, [sites, measurementFilter, setFilteredSiteCount])
 
   useEffect(() => {
-    if (!mapContainer.current || map.current || !filteredSites.length) return
+    if (!mapContainer.current || map.current) return
 
     try {
       const newMap = new mapboxgl.Map({
@@ -76,8 +68,7 @@ export function MapView({
 
       newMap.on('load', () => {
         const validSites = filteredSites.filter(site => site.geometry?.type === 'Point')
-        if (!validSites.length) return
-
+        
         const geojson: GeoJSON.FeatureCollection = {
           type: 'FeatureCollection',
           features: validSites.map(site => ({
@@ -110,11 +101,13 @@ export function MapView({
           }
         })
 
-        if (geojson.features.length > 0) {
+        if (validSites.length > 0) {
           const bounds = new mapboxgl.LngLatBounds()
-          geojson.features.forEach(feature => {
-            const coords = (feature.geometry as GeoJSON.Point).coordinates as [number, number]
-            bounds.extend(coords)
+          validSites.forEach(site => {
+            if (site.geometry?.type === 'Point') {
+              const coords = site.geometry.coordinates as [number, number]
+              bounds.extend(coords)
+            }
           })
           newMap.fitBounds(bounds, { padding: 50 })
         }
@@ -198,8 +191,9 @@ export function MapView({
         map.current = null
       }
     }
-  }, [filteredSites, setChartData, setChartError, setChartLoading, setChartVisible, setSelectedSite])
+  }, [filteredSites])
 
+  // Separate effect to update map data without recreating map
   useEffect(() => {
     if (!map.current) return
 
