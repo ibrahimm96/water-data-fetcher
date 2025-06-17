@@ -57,7 +57,6 @@ export function buildGWLevelsURL(countyCd, startDT = null, endDT = null) {
     format: 'json',
     countyCd,
     indent: 'on',
-    siteStatus: 'active',
     siteType: 'GW'
   });
   

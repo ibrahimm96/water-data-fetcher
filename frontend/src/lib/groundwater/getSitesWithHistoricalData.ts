@@ -4,74 +4,85 @@ import type { GroundwaterMonitoringSite } from './types'
 
 type SiteWithCount = GroundwaterMonitoringSite & { measurement_count?: number }
 
-export const getSitesWithHistoricalData = async (): Promise<SiteWithCount[]> => {
+export const getSitesWithHistoricalData = async (maxSites?: number): Promise<SiteWithCount[]> => {
   const allSites: SiteWithCount[] = []
   const batchSize = 1000
-  let offset = 0
-  let hasMore = true
+  let from = 0
+  let totalLoaded = 0
+  const targetLimit = maxSites || 100000 // Default to loading up to 100k sites
 
-  while (hasMore) {
+  console.log(`Loading sites from gw_sites_with_historical_data view (target: ${targetLimit})...`)
+
+  while (totalLoaded < targetLimit) {
+    const to = Math.min(from + batchSize - 1, targetLimit - 1)
+    
+    console.log(`Fetching batch: ${from} to ${to}`)
+    
     const { data: batch, error } = await supabase
       .from('gw_sites_with_historical_data')
-      .select('monitoring_location_number, monitoring_location_name, state_code, county_code, geometry, agency_code')
-      .range(offset, offset + batchSize - 1)
-      .order('monitoring_location_number')
+      .select('*')
+      .order('monitoring_location_number', { ascending: true })
+      .range(from, to)
 
-    if (error) throw error
-    if (!batch || batch.length === 0) break
+    if (error) {
+      console.error(`Error loading batch ${from}-${to}:`, error)
+      break
+    }
 
-    const batchSites = batch.map(site => {
+    if (!batch || batch.length === 0) {
+      console.log('No more sites to load')
+      break
+    }
+
+    // Log available columns from first batch
+    if (from === 0) {
+      console.log('Available columns in view:', Object.keys(batch[0]))
+    }
+
+    const batchSites = batch.map((site) => {
       const coords = parseGeometryPoint(site.geometry)
       if (!coords) return null
 
       const mapped: SiteWithCount = {
-        id: 0, // or proper fallback/default if applicable
+        id: 0,
         inserted_at: '',
         updated_at: '',
-        monitoring_location_id: site.monitoring_location_number,
+        monitoring_location_id: String(site.monitoring_location_id || site.monitoring_location_number || ''),
         geometry: {
-            type: 'Point',
-            coordinates: [coords.longitude, coords.latitude]
+          type: 'Point',
+          coordinates: [coords.longitude, coords.latitude]
         },
-        agency_code: site.agency_code,
-        monitoring_location_number: site.monitoring_location_number,
-        monitoring_location_name: site.monitoring_location_name,
-        state_code: site.state_code,
-        county_code: site.county_code,
-        site_type_code: null,
-        hydrologic_unit_code: null,
-        aquifer_code: null,
-        aquifer_type_code: null,
-        altitude: null,
-        vertical_datum: null,
-        measurement_count: 0
+        agency_code: String(site.agency_code || ''),
+        monitoring_location_number: String(site.monitoring_location_number || site.monitoring_location_id || ''),
+        monitoring_location_name: String(site.monitoring_location_name || ''),
+        state_code: String(site.state_code || ''),
+        county_code: String(site.county_code || ''),
+        site_type_code: site.site_type_code ? String(site.site_type_code) : null,
+        hydrologic_unit_code: site.hydrologic_unit_code ? String(site.hydrologic_unit_code) : null,
+        aquifer_code: site.aquifer_code ? String(site.aquifer_code) : null,
+        aquifer_type_code: site.aquifer_type_code ? String(site.aquifer_type_code) : null,
+        altitude: site.altitude ? Number(site.altitude) : null,
+        vertical_datum: site.vertical_datum ? String(site.vertical_datum) : null,
+        measurement_count: Number(site.measurement_count || 0)
       }
 
       return mapped
     }).filter(Boolean) as SiteWithCount[]
 
     allSites.push(...batchSites)
-    hasMore = batch.length === batchSize
-    offset += batchSize
+    totalLoaded += batch.length
+
+    console.log(`Loaded batch: ${batch.length} sites (total: ${totalLoaded})`)
+
+    // If we got fewer than requested, we've reached the end
+    if (batch.length < batchSize) {
+      console.log('Reached end of data')
+      break
+    }
+
+    from = to + 1
   }
 
-  const { data: measurements, error: countError } = await supabase
-    .from('gw_historical_timeseries')
-    .select('monitoring_location_number')
-    .eq('variable_code', '72019')
-    .not('measurement_datetime', 'is', null)
-    .not('measurement_value', 'is', null)
-
-  if (!countError && measurements) {
-    const countMap = new Map<string, number>()
-    measurements.forEach(row => {
-      const id = row.monitoring_location_number
-      countMap.set(id, (countMap.get(id) || 0) + 1)
-    })
-    allSites.forEach(site => {
-      site.measurement_count = countMap.get(site.monitoring_location_id ?? '') || 0
-    })
-  }
-
+  console.log(`Finished loading ${allSites.length} sites total`)
   return allSites
 }
