@@ -20,6 +20,8 @@ function App() {
     max: null
   })
 
+  const [filteredSiteCount, setFilteredSiteCount] = useState(0)
+
   return (
     <div style={{
       position: 'fixed',
@@ -82,6 +84,7 @@ function App() {
           onClose={() => setSidebarOpen(false)}
           measurementFilter={measurementFilter}
           onMeasurementFilterChange={setMeasurementFilter}
+          filteredSiteCount={filteredSiteCount}
         />
         {!sidebarOpen && (
           <button
@@ -113,6 +116,7 @@ function App() {
           setChartError={setChartError}
           setChartLoading={setChartLoading}
           setSelectedSite={setSelectedSite}
+          setFilteredSiteCount={setFilteredSiteCount}
         />
 
         <TimeSeriesChart

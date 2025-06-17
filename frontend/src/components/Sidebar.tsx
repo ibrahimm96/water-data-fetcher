@@ -7,10 +7,11 @@ interface SidebarProps {
     max: number | null
   }
   onMeasurementFilterChange: (filter: { min: number; max: number | null }) => void
+  filteredSiteCount: number
 }
 
 // Sidebar Component
-export function Sidebar({ isOpen, onClose, measurementFilter, onMeasurementFilterChange }: SidebarProps) {
+export function Sidebar({ isOpen, onClose, measurementFilter, onMeasurementFilterChange, filteredSiteCount }: SidebarProps) {
   return (
     <div style={{
       position: 'absolute',
@@ -142,7 +143,7 @@ export function Sidebar({ isOpen, onClose, measurementFilter, onMeasurementFilte
           fontSize: '12px',
           color: '#bdc3c7'
         }}>
-          Currently showing sites with {measurementFilter.min}+ measurements
+          Currently showing <strong style={{ color: '#3498db' }}>{filteredSiteCount.toLocaleString()}</strong> sites with {measurementFilter.min}+ measurements
           {measurementFilter.max ? ` and ≤${measurementFilter.max}` : ''}
         </div>
       </div>

@@ -16,4 +16,5 @@ export interface MapViewProps {
   setChartError: (error: string | null) => void
   setChartLoading: (loading: boolean) => void
   setSelectedSite: (site: { id: string; name: string } | null) => void
+  setFilteredSiteCount: (count: number) => void
 }

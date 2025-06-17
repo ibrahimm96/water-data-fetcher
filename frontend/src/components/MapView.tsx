@@ -19,7 +19,8 @@ export function MapView({
   setChartData,
   setChartError,
   setChartLoading,
-  setSelectedSite
+  setSelectedSite,
+  setFilteredSiteCount
 }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const map = useRef<mapboxgl.Map | null>(null)
@@ -30,11 +31,17 @@ export function MapView({
 
   useEffect(() => {
     const loadSites = async () => {
-      console.log('Loading sites data...')
       try {
         const data = await getSitesWithHistoricalData()
-        console.log(`Loaded ${data.length} sites`)
         setSites(data)
+        
+        // Initialize filtered count immediately after loading sites
+        const initialFiltered = data.filter(site => {
+          const count = site.measurement_count || 0
+          return count >= measurementFilter.min && 
+                 (measurementFilter.max === null || count <= measurementFilter.max)
+        })
+        setFilteredSiteCount(initialFiltered.length)
       } catch (err) {
         console.error('Failed to load sites:', err)
         setError(err instanceof Error ? err.message : 'Failed to load sites')
@@ -43,9 +50,8 @@ export function MapView({
       }
     }
     loadSites()
-  }, [])
+  }, [measurementFilter.min, measurementFilter.max, setFilteredSiteCount])
 
-  // Filter sites based on measurement count
   useEffect(() => {
     const filtered = sites.filter(site => {
       const count = site.measurement_count || 0
@@ -53,8 +59,8 @@ export function MapView({
              (measurementFilter.max === null || count <= measurementFilter.max)
     })
     setFilteredSites(filtered)
-    console.log(`Filtered to ${filtered.length} sites (${measurementFilter.min}+ measurements)`)
-  }, [sites, measurementFilter])
+    setFilteredSiteCount(filtered.length)
+  }, [sites, measurementFilter, setFilteredSiteCount])
 
   useEffect(() => {
     if (!mapContainer.current || map.current || !filteredSites.length) return
@@ -89,51 +95,13 @@ export function MapView({
 
         newMap.addSource('sites', {
           type: 'geojson',
-          data: geojson,
-          cluster: true,
-          clusterRadius: 30
+          data: geojson
         })
 
         newMap.addLayer({
-          id: 'clusters',
+          id: 'site-points',
           type: 'circle',
           source: 'sites',
-          filter: ['has', 'point_count'],
-          paint: {
-            'circle-color': [
-              'step',
-              ['get', 'point_count'],
-              '#51bbd6', 10,
-              '#f1f075', 100,
-              '#f28cb1'
-            ],
-            'circle-radius': [
-              'step',
-              ['get', 'point_count'],
-              20, 10,
-              30, 100,
-              40
-            ]
-          }
-        })
-
-        newMap.addLayer({
-          id: 'cluster-count',
-          type: 'symbol',
-          source: 'sites',
-          filter: ['has', 'point_count'],
-          layout: {
-            'text-field': '{point_count_abbreviated}',
-            'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
-            'text-size': 12
-          }
-        })
-
-        newMap.addLayer({
-          id: 'unclustered-point',
-          type: 'circle',
-          source: 'sites',
-          filter: ['!', ['has', 'point_count']],
           paint: {
             'circle-color': '#3498db',
             'circle-radius': 8,
@@ -151,7 +119,7 @@ export function MapView({
           newMap.fitBounds(bounds, { padding: 50 })
         }
 
-        newMap.on('click', 'unclustered-point', async (e) => {
+        newMap.on('click', 'site-points', async (e) => {
           if (!e.features?.[0]) return
           const feature = e.features[0]
           const props = feature.properties
@@ -206,33 +174,10 @@ export function MapView({
           }
         })
 
-        newMap.on('click', 'clusters', (e) => {
-          const features = newMap.queryRenderedFeatures(e.point, { layers: ['clusters'] })
-          if (!features.length) return
-
-          const clusterId = features[0].properties?.cluster_id
-          const source = newMap.getSource('sites') as mapboxgl.GeoJSONSource
-
-          source.getClusterExpansionZoom(clusterId, (err, zoom) => {
-            if (err || zoom == null) return
-            const coordinates = (features[0].geometry as GeoJSON.Point).coordinates
-            newMap.easeTo({ center: coordinates as [number, number], zoom })
-          })
-        })
-
-        newMap.on('mouseenter', 'unclustered-point', () => {
+        newMap.on('mouseenter', 'site-points', () => {
           newMap.getCanvas().style.cursor = 'pointer'
         })
-
-        newMap.on('mouseleave', 'unclustered-point', () => {
-          newMap.getCanvas().style.cursor = ''
-        })
-
-        newMap.on('mouseenter', 'clusters', () => {
-          newMap.getCanvas().style.cursor = 'pointer'
-        })
-
-        newMap.on('mouseleave', 'clusters', () => {
+        newMap.on('mouseleave', 'site-points', () => {
           newMap.getCanvas().style.cursor = ''
         })
       })
@@ -255,7 +200,6 @@ export function MapView({
     }
   }, [filteredSites, setChartData, setChartError, setChartLoading, setChartVisible, setSelectedSite])
 
-  // Update map data when filteredSites changes
   useEffect(() => {
     if (!map.current) return
 
