@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { MapView } from './components/MapView'
 import { Sidebar } from './components/Sidebar'
 import { TimeSeriesChart } from './components/TimeSeriesGraph'
+import { MapSettingsPanel } from './components/MapSettingsPanel'
 import './App.css'
 
 function App() {
@@ -11,6 +12,7 @@ function App() {
   const [chartData, setChartData] = useState<any>(null)
   const [chartLoading, setChartLoading] = useState(false)
   const [chartError, setChartError] = useState<string | null>(null)
+
 
   const [measurementFilter, setMeasurementFilter] = useState<{
     min: number
@@ -116,7 +118,7 @@ function App() {
           setChartError={setChartError}
           setChartLoading={setChartLoading}
           setSelectedSite={setSelectedSite}
-          setFilteredSiteCount={setFilteredSiteCount}
+          setFilteredSiteCount={setFilteredSiteCount}    
         />
 
         <TimeSeriesChart
@@ -132,6 +134,9 @@ function App() {
           chartData={chartData}
           isLoading={chartLoading}
           error={chartError}
+        />
+
+        <MapSettingsPanel
         />
       </div>
     </div>

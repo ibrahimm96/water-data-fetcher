@@ -1,4 +1,6 @@
 // components/Sidebar.tsx
+import { Range } from 'react-range'
+
 interface SidebarProps {
   isOpen: boolean
   onClose: () => void
@@ -10,8 +12,23 @@ interface SidebarProps {
   filteredSiteCount: number
 }
 
+const STEP = 1
+const MIN = 0
+const MAX = 100
+
 // Sidebar Component
-export function Sidebar({ isOpen, onClose, measurementFilter, onMeasurementFilterChange, filteredSiteCount }: SidebarProps) {
+export function Sidebar({
+  isOpen,
+  onClose,
+  measurementFilter,
+  onMeasurementFilterChange,
+  filteredSiteCount
+}: SidebarProps) {
+  const sliderValues = [
+    measurementFilter.min,
+    measurementFilter.max === null ? MAX : measurementFilter.max
+  ]
+
   return (
     <div style={{
       position: 'absolute',
@@ -89,52 +106,63 @@ export function Sidebar({ isOpen, onClose, measurementFilter, onMeasurementFilte
         }}>
           Measurement Count Filter
         </h4>
-        
-        <div style={{ marginBottom: '16px' }}>
-          <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '8px'
-          }}>
-            {[
-              { label: 'All Sites', min: 0, max: null },
-              { label: '1+ Measurements', min: 1, max: null },
-              { label: '5+ Measurements', min: 5, max: null },
-              { label: '10+ Measurements', min: 10, max: null },
-              { label: '25+ Measurements', min: 25, max: null }
-            ].map((option) => (
-              <button
-                key={option.label}
-                onClick={() => onMeasurementFilterChange({ min: option.min, max: option.max })}
+
+        {/* Dual Handle Range Slider */}
+        <Range
+          step={STEP}
+          min={MIN}
+          max={MAX}
+          values={sliderValues}
+          onChange={(values) => {
+            const [min, max] = values
+            onMeasurementFilterChange({
+              min,
+              max: max === MAX ? null : max
+            })
+          }}
+          renderTrack={({ props, children }) => (
+            <div
+              {...props}
+              style={{
+                ...props.style,
+                height: '6px',
+                background: '#34495e',
+                borderRadius: '3px',
+                marginBottom: '24px'
+              }}
+            >
+              <div
                 style={{
-                  padding: '8px 12px',
-                  fontSize: '12px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  backgroundColor: 
-                    measurementFilter.min === option.min && measurementFilter.max === option.max
-                      ? '#3498db' 
-                      : '#2c3e50',
-                  color: '#ecf0f1',
-                  transition: 'background-color 0.2s'
+                  height: '100%',
+                  background: '#3498db',
+                  marginLeft: `${((sliderValues[0] - MIN) / (MAX - MIN)) * 100}%`,
+                  width: `${((sliderValues[1] - sliderValues[0]) / (MAX - MIN)) * 100}%`
                 }}
-                onMouseEnter={(e) => {
-                  if (measurementFilter.min !== option.min || measurementFilter.max !== option.max) {
-                    e.currentTarget.style.backgroundColor = '#34495e'
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (measurementFilter.min !== option.min || measurementFilter.max !== option.max) {
-                    e.currentTarget.style.backgroundColor = '#2c3e50'
-                  }
-                }}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </div>
+              />
+              {children}
+            </div>
+          )}
+
+          renderThumb={({ props }) => (
+            <div
+              {...props}
+              style={{
+                ...props.style,
+                height: '16px',
+                width: '16px',
+                borderRadius: '50%',
+                backgroundColor: '#1abc9c',
+                border: '2px solid #ecf0f1',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginTop: '-5px' 
+              }}
+            />
+          )}
+
+        />
 
         <div style={{
           padding: '12px',
@@ -143,8 +171,13 @@ export function Sidebar({ isOpen, onClose, measurementFilter, onMeasurementFilte
           fontSize: '12px',
           color: '#bdc3c7'
         }}>
-          Currently showing <strong style={{ color: '#3498db' }}>{filteredSiteCount.toLocaleString()}</strong> sites with {measurementFilter.min}+ measurements
-          {measurementFilter.max ? ` and ≤${measurementFilter.max}` : ''}
+          Showing sites with <strong style={{ color: '#3498db' }}>{measurementFilter.min}</strong>
+          {' to '}
+          <strong style={{ color: '#3498db' }}>
+            {measurementFilter.max === null ? '∞' : measurementFilter.max}
+          </strong> measurements
+          <br />
+          (<strong style={{ color: '#3498db' }}>{filteredSiteCount.toLocaleString()}</strong> total)
         </div>
       </div>
     </div>

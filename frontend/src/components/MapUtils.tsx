@@ -6,6 +6,13 @@ export interface ChartData {
   totalPoints?: number
 }
 
+// export interface MapSettings {
+//   style: 'streets' | 'satellite' | 'dark' | 'light'
+//   showCountyBorders: boolean
+//   showLabels: boolean
+//   enable3DTerrain: boolean
+// }
+
 export interface MapViewProps {
   measurementFilter: {
     min: number
@@ -17,4 +24,5 @@ export interface MapViewProps {
   setChartLoading: (loading: boolean) => void
   setSelectedSite: (site: { id: string; name: string } | null) => void
   setFilteredSiteCount: (count: number) => void
+  //mapSettings: MapSettings
 }

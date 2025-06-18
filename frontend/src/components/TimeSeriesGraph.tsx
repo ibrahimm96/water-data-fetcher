@@ -26,7 +26,7 @@ export function TimeSeriesChart({
   isLoading, 
   error 
 }: TimeSeriesChartProps) {
-  const [position, setPosition] = useState({ x: 100, y: 100 })
+  const [position, setPosition] = useState({ x: 850, y: 300 })
   const [isDragging, setIsDragging] = useState(false)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const chartRef = useRef<HTMLDivElement>(null)
