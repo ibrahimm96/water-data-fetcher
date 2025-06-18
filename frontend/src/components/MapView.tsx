@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { getSitesWithHistoricalData } from '../lib/groundwater/getSitesWithHistoricalData'
@@ -28,6 +28,8 @@ export function MapView({
   const [filteredSites, setFilteredSites] = useState<GroundwaterMonitoringSite[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [mapReady, setMapReady] = useState(false)
+  const [mapError, setMapError] = useState<string | null>(null)
 
   useEffect(() => {
     const loadSites = async () => {
@@ -42,20 +44,56 @@ export function MapView({
       }
     }
     loadSites()
-  }, []) // Only load sites once on mount
+  }, [])
 
   useEffect(() => {
     const filtered = sites.filter(site => {
       const count = site.measurement_count || 0
-      return count >= measurementFilter.min && 
-             (measurementFilter.max === null || count <= measurementFilter.max)
+      return count >= measurementFilter.min &&
+        (measurementFilter.max === null || count <= measurementFilter.max)
     })
     setFilteredSites(filtered)
     setFilteredSiteCount(filtered.length)
   }, [sites, measurementFilter, setFilteredSiteCount])
 
+  const geojsonData = useMemo(() => {
+    const validSites = filteredSites.filter(site => site.geometry?.type === 'Point')
+    
+    return {
+      type: 'FeatureCollection' as const,
+      features: validSites.map(site => ({
+        type: 'Feature' as const,
+        geometry: site.geometry as GeoJSON.Geometry,
+        properties: {
+          monitoring_location_id: site.monitoring_location_id,
+          monitoring_location_name: site.monitoring_location_name || 'Unnamed Site',
+          county_code: site.county_code,
+          state_code: site.state_code,
+          measurement_count: site.measurement_count || 0
+        }
+      }))
+    }
+  }, [filteredSites])
+
+  // Map initialization effect - runs only once
   useEffect(() => {
-    if (!mapContainer.current || map.current) return
+    console.log('Map effect running...')
+    console.log('mapContainer.current:', mapContainer.current)
+    console.log('map.current:', map.current)
+    
+    if (map.current) {
+      console.log('Map already exists, skipping')
+      return
+    }
+    
+    if (!mapContainer.current) {
+      console.log('Container not ready, will retry on next render')
+      return
+    }
+
+    console.log('Initializing map...')
+    console.log('Mapbox token:', mapboxAccessToken ? 'present' : 'missing')
+    console.log('Container:', mapContainer.current)
 
     try {
       const newMap = new mapboxgl.Map({
@@ -66,29 +104,39 @@ export function MapView({
         attributionControl: true
       })
 
-      newMap.on('load', () => {
-        const validSites = filteredSites.filter(site => site.geometry?.type === 'Point')
-        
-        const geojson: GeoJSON.FeatureCollection = {
-          type: 'FeatureCollection',
-          features: validSites.map(site => ({
-            type: 'Feature',
-            geometry: site.geometry as GeoJSON.Geometry,
-            properties: {
-              monitoring_location_id: site.monitoring_location_id,
-              monitoring_location_name: site.monitoring_location_name || 'Unnamed Site',
-              county_code: site.county_code,
-              state_code: site.state_code,
-              measurement_count: site.measurement_count || 0
-            }
-          }))
-        }
+      console.log('Map instance created')
 
+      const handleMapLoad = () => {
+        console.log('Map loaded successfully!')
+        
+        // Add California counties layer
+        fetch('/public/California_Counties.geojson')
+          .then(response => response.json())
+          .then(data => {
+            newMap.addSource('california-counties', {
+              type: 'geojson',
+              data
+            })
+
+            newMap.addLayer({
+              id: 'california-counties-outline',
+              type: 'line',
+              source: 'california-counties',
+              paint: {
+                'line-color': '#000000',
+                'line-width': 1.2
+              }
+            }, 'site-points')
+          })
+          .catch(err => console.error('Failed to load counties:', err))
+
+        // Add empty sites source
         newMap.addSource('sites', {
           type: 'geojson',
-          data: geojson
+          data: { type: 'FeatureCollection', features: [] }
         })
 
+        // Add sites layer
         newMap.addLayer({
           id: 'site-points',
           type: 'circle',
@@ -101,142 +149,173 @@ export function MapView({
           }
         })
 
-        if (validSites.length > 0) {
-          const bounds = new mapboxgl.LngLatBounds()
-          validSites.forEach(site => {
-            if (site.geometry?.type === 'Point') {
-              const coords = site.geometry.coordinates as [number, number]
-              bounds.extend(coords)
-            }
-          })
-          newMap.fitBounds(bounds, { padding: 50 })
-        }
+        setMapReady(true)
+      }
 
-        newMap.on('click', 'site-points', async (e) => {
-          if (!e.features?.[0]) return
-          const feature = e.features[0]
-          const props = feature.properties
-          const coords = (feature.geometry as GeoJSON.Point).coordinates as [number, number]
+      newMap.on('load', handleMapLoad)
 
-          if (!props) return
+      // Site click handler
+      const handleSiteClick = async (e: mapboxgl.MapMouseEvent & { features?: GeoJSON.Feature[] }) => {
+        if (!e.features?.[0]) return
+        const feature = e.features[0]
+        const props = feature.properties
+        const coords = (feature.geometry as GeoJSON.Point).coordinates as [number, number]
+        if (!props) return
 
-          const siteId = props.monitoring_location_id || ''
-          const siteName = props.monitoring_location_name || 'Unnamed Site'
+        const siteId = props.monitoring_location_id || ''
+        const siteName = props.monitoring_location_name || 'Unnamed Site'
 
-          newMap.easeTo({ center: coords, zoom: Math.max(newMap.getZoom(), 12), duration: 1000, padding: { top: 50, bottom: 50, left: 50, right: 350 } })
+        newMap.easeTo({
+          center: coords,
+          zoom: Math.max(newMap.getZoom(), 12),
+          duration: 1000,
+          padding: { top: 50, bottom: 50, left: 50, right: 350 }
+        })
 
-          const loadingPopup = new mapboxgl.Popup()
+        const loadingPopup = new mapboxgl.Popup()
+          .setLngLat(coords)
+          .setHTML(`<div style="text-align:center; padding: 10px;">Loading data for ${siteName}...</div>`)
+          .addTo(newMap)
+
+        try {
+          setSelectedSite({ id: siteId, name: siteName })
+          setChartVisible(true)
+          setChartLoading(true)
+          setChartError(null)
+          setChartData(null)
+
+          const [, chart] = await Promise.all([
+            getSiteHistoricalSummary(siteId),
+            getSiteHistoricalChartData(siteId)
+          ])
+
+          setChartData(chart)
+          setChartLoading(false)
+          loadingPopup.remove()
+
+          new mapboxgl.Popup()
             .setLngLat(coords)
-            .setHTML(`<div style="text-align:center; padding: 10px;">Loading data for ${siteName}...</div>`)
+            .setHTML(`
+              <div style="padding: 10px; font-size: 14px;">
+                <strong>${siteName}</strong><br/>
+                Site ID: ${siteId}<br/>
+                WIP
+              </div>
+            `)
             .addTo(newMap)
+        } catch (err) {
+          setChartError(err instanceof Error ? err.message : 'Failed to load data')
+          setChartLoading(false)
+          loadingPopup.remove()
 
-          try {
-            setSelectedSite({ id: siteId, name: siteName })
-            setChartVisible(true)
-            setChartLoading(true)
-            setChartError(null)
-            setChartData(null)
+          new mapboxgl.Popup()
+            .setLngLat(coords)
+            .setHTML(`<div style="color:red; padding: 10px;">Failed to load data</div>`)
+            .addTo(newMap)
+        }
+      }
 
-            const [, chart] = await Promise.all([
-              getSiteHistoricalSummary(siteId),
-              getSiteHistoricalChartData(siteId)
-            ])
-            setChartData(chart)
-            setChartLoading(false)
-            loadingPopup.remove()
-
-            new mapboxgl.Popup()
-              .setLngLat(coords)
-              .setHTML(`
-                <div style="padding: 10px; font-size: 14px;">
-                  <strong>${siteName}</strong><br/>
-                  Site ID: ${siteId}<br/>
-                  WIP
-                </div>
-              `)
-              .addTo(newMap)
-
-          } catch (err) {
-            setChartError(err instanceof Error ? err.message : 'Failed to load data')
-            setChartLoading(false)
-            loadingPopup.remove()
-            new mapboxgl.Popup()
-              .setLngLat(coords)
-              .setHTML(`<div style="color:red; padding: 10px;">Failed to load data</div>`)
-              .addTo(newMap)
-          }
-        })
-
-        newMap.on('mouseenter', 'site-points', () => {
-          newMap.getCanvas().style.cursor = 'pointer'
-        })
-        newMap.on('mouseleave', 'site-points', () => {
-          newMap.getCanvas().style.cursor = ''
-        })
+      newMap.on('click', 'site-points', handleSiteClick)
+      newMap.on('mouseenter', 'site-points', () => {
+        newMap.getCanvas().style.cursor = 'pointer'
+      })
+      newMap.on('mouseleave', 'site-points', () => {
+        newMap.getCanvas().style.cursor = ''
       })
 
       newMap.on('error', (e) => {
-        setError(`Map error: ${e.error?.message || 'Unknown error'}`)
+        console.error('Map error:', e.error)
+        setMapError(`Map error: ${e.error?.message || 'Unknown error'}`)
       })
 
       newMap.addControl(new mapboxgl.NavigationControl(), 'top-right')
       map.current = newMap
-    } catch (mapError) {
-      setError(`Failed to initialize map: ${mapError instanceof Error ? mapError.message : 'Unknown error'}`)
+    } catch (mapInitError) {
+      console.error('Map initialization error:', mapInitError)
+      setMapError(`Failed to initialize map: ${mapInitError instanceof Error ? mapInitError.message : 'Unknown error'}`)
     }
 
     return () => {
       if (map.current) {
         map.current.remove()
         map.current = null
+        setMapReady(false)
       }
     }
-  }, [filteredSites])
+  }, [loading])
 
-  // Separate effect to update map data without recreating map
+  // Data update effect - runs when filteredSites changes
   useEffect(() => {
-    if (!map.current) return
+    if (!map.current || !mapReady) return
 
-    const validSites = filteredSites.filter(site => site.geometry?.type === 'Point')
-    
-    const geojson: GeoJSON.FeatureCollection = {
-      type: 'FeatureCollection',
-      features: validSites.map(site => ({
-        type: 'Feature',
-        geometry: site.geometry as GeoJSON.Geometry,
-        properties: {
-          monitoring_location_id: site.monitoring_location_id,
-          monitoring_location_name: site.monitoring_location_name || 'Unnamed Site',
-          county_code: site.county_code,
-          state_code: site.state_code,
-          measurement_count: site.measurement_count || 0
-        }
-      }))
-    }
+    // Update sites data layer without recreating map
 
     const source = map.current.getSource('sites') as mapboxgl.GeoJSONSource
     if (source) {
-      source.setData(geojson)
+      source.setData(geojsonData)
+      
+      // Fit bounds only on initial load (when all sites are showing)
+      if (geojsonData.features.length > 0 && filteredSites.length === sites.length) {
+        const bounds = new mapboxgl.LngLatBounds()
+        geojsonData.features.forEach(feature => {
+          if (feature.geometry.type === 'Point') {
+            bounds.extend(feature.geometry.coordinates as [number, number])
+          }
+        })
+        map.current.fitBounds(bounds, { padding: 50 })
+      }
     }
-  }, [filteredSites])
+  }, [geojsonData, mapReady, filteredSites.length, sites.length])
 
   if (loading) {
     return (
-      <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'white' }}>
-        <div style={{ textAlign: 'center' }}>Loading map data...</div>
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'white'
+      }}>
+        <div style={{ textAlign: 'center', marginLeft: '200px' }}>Loading map data...</div>
       </div>
     )
   }
 
-  if (error) {
+  if (error || mapError) {
     return (
-      <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'white' }}>
-        <div style={{ textAlign: 'center', color: 'red' }}>Error: {error}</div>
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'white'
+      }}>
+        <div style={{ textAlign: 'center', color: 'red' }}>
+          Error: {error || mapError}
+        </div>
       </div>
     )
   }
 
   return (
-    <div ref={mapContainer} style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, zIndex: 1 }} />
+    <div
+      ref={mapContainer}
+      style={{
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 1
+      }}
+    />
   )
 }
