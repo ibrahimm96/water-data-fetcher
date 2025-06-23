@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { MapView } from './components/MapView'
+import { MapView } from './components/Map/MapView'
 import { Sidebar } from './components/Sidebar'
-import { TimeSeriesChart } from './components/TimeSeriesGraph'
+import { DraggablePanel } from './components/Draggable_Panel/DraggablePanel'
 import { MapSettingsPanel } from './components/MapSettingsPanel'
 import './App.css'
 
@@ -121,7 +121,7 @@ function App() {
           setFilteredSiteCount={setFilteredSiteCount}    
         />
 
-        <TimeSeriesChart
+        <DraggablePanel
           siteId={selectedSite?.id || ''}
           siteName={selectedSite?.name || ''}
           isVisible={chartVisible}
