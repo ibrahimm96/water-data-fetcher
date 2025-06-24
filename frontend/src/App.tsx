@@ -33,7 +33,9 @@ function App() {
       bottom: 0,
       display: 'flex',
       flexDirection: 'column',
-      overflow: 'hidden'
+      overflow: 'hidden',
+      width: '125%',
+      height: '125%'
     }}>
       {/* Top Banner */}
       <div style={{

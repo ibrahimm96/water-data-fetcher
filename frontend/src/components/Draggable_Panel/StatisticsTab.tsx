@@ -1,5 +1,4 @@
 import type { ChartTabContentProps } from './ChartTab'
-import { DataTable } from './DataTable'
 
 type StatisticsTabContentProps = {
   siteId: string
@@ -48,10 +47,12 @@ export function StatisticsTabContent({ siteId, chartData }: StatisticsTabContent
       flexDirection: 'column',
       height: '100%',
       fontSize: '13px',
-      color: '#2c3e50'
+      color: '#2c3e50',
+      padding: '16px',
+      overflowY: 'auto'
     }}>
       {/* Most Recent Measurement */}
-      <div style={{ textAlign: 'center', padding: '12px 16px 0 16px' }}>
+      <div style={{ textAlign: 'center', marginBottom: '20px' }}>
         <div style={{
           fontSize: '24px',
           fontWeight: 'bold',
@@ -60,46 +61,40 @@ export function StatisticsTabContent({ siteId, chartData }: StatisticsTabContent
         }}>
           {lastPoint.value.toFixed(2)} {chartData.unit || ''}
         </div>
-        <div style={{
-          fontSize: '12px',
-          color: '#666',
-          marginTop: '2px'
-        }}>
-          Measured on {new Date(lastPoint.dateString).toLocaleDateString()}
+        <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
+          Measured on {lastDate.toLocaleDateString()}
         </div>
       </div>
 
-      {/* Scrollable Content */}
-    <div style={{ display: 'flex', flexDirection: 'row', gap: '16px', height: '100%' }}>
-  {/* Left column: Stats */}
-  <div style={{ flex: 1, overflowY: 'auto' }}>
-    <div style={{ fontWeight: '600', fontSize: '13.5px', borderBottom: '1px solid #ddd', paddingBottom: '4px', marginBottom: '12px' }}>
-      Statistics for Site {siteId}
-    </div>
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      rowGap: '8px',
-      columnGap: '16px',
-      lineHeight: '1.4'
-    }}>
-      <Stat label="Total Measurements" value={chartData.totalPoints.toLocaleString()} />
-      <Stat label="Data Span" value={`${dataSpanDays} days`} />
-      <Stat label="First Measurement" value={firstDate.toLocaleDateString()} />
-      <Stat label="Last Measurement" value={lastDate.toLocaleDateString()} />
-      <Stat label="Min Value" value={min.toFixed(2)} suffix={chartData.unit || undefined} />
-      <Stat label="Max Value" value={max.toFixed(2)} suffix={chartData.unit || undefined} />
-      <Stat label="Avg Value" value={avg.toFixed(2)} suffix={chartData.unit || undefined} />
-      <Stat label="Variable" value={chartData.variable_name || 'N/A'} />
-      <Stat label="Unit" value={chartData.unit || 'N/A'} />
-    </div>
-  </div>
+      {/* Section Header */}
+      <div style={{
+        fontWeight: '600',
+        fontSize: '13.5px',
+        borderBottom: '1px solid #ddd',
+        paddingBottom: '4px',
+        marginBottom: '12px'
+      }}>
+        Statistics for Site {siteId}
+      </div>
 
-  {/* Right column: Data table */}
-  <div style={{ flex: 1, overflowY: 'auto' }}>
-    <DataTable data={chartData.data} unit={chartData.unit} />
-    </div>
-    </div>
+      {/* Stat Grid */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        rowGap: '10px',
+        columnGap: '16px',
+        lineHeight: '1.4'
+      }}>
+        <Stat label="Total Measurements" value={chartData.totalPoints.toLocaleString()} />
+        <Stat label="Data Span" value={`${dataSpanDays} days`} />
+        <Stat label="First Measurement" value={firstDate.toLocaleDateString()} />
+        <Stat label="Last Measurement" value={lastDate.toLocaleDateString()} />
+        <Stat label="Min Value" value={min.toFixed(2)} suffix={chartData.unit || undefined} />
+        <Stat label="Max Value" value={max.toFixed(2)} suffix={chartData.unit || undefined} />
+        <Stat label="Avg Value" value={avg.toFixed(2)} suffix={chartData.unit || undefined} />
+        <Stat label="Variable" value={chartData.variable_name || 'N/A'} />
+        <Stat label="Unit" value={chartData.unit || 'N/A'} />
+      </div>
     </div>
   )
 }

@@ -1,4 +1,3 @@
-// components/Sidebar.tsx
 import { Range } from 'react-range'
 
 interface SidebarProps {

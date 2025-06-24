@@ -124,7 +124,8 @@ export function MapView({
               source: 'california-counties',
               paint: {
                 'line-color': '#000000',
-                'line-width': 1.2
+                'line-width': 1.2,
+                'line-opacity': 0.2  // Add this line
               }
             }, 'site-points')
           })

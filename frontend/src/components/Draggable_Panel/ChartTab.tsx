@@ -1,4 +1,3 @@
-import { useRef, useEffect, useState } from 'react'
 import { LineChart } from '@mui/x-charts/LineChart'
 
 export interface ChartTabContentProps {
@@ -12,7 +11,6 @@ export interface ChartTabContentProps {
     totalPoints: number
   } | null
 }
-
 const formatDate = (timestamp: number) => {
   return new Date(timestamp).toLocaleDateString('en-US', {
     year: 'numeric',
@@ -22,24 +20,6 @@ const formatDate = (timestamp: number) => {
 }
 
 export function ChartTabContent({ isLoading, error, chartData }: ChartTabContentProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [dimensions, setDimensions] = useState({ width: 500, height: 250 })
-
-  useEffect(() => {
-    if (!containerRef.current) return
-
-    const observer = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect
-      setDimensions({
-        width: Math.max(300, Math.floor(width)),
-        height: Math.max(200, Math.floor(height) - 90) // reserve height for header
-      })
-    })
-
-    observer.observe(containerRef.current)
-    return () => observer.disconnect()
-  }, [])
-
   if (isLoading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
@@ -73,14 +53,14 @@ export function ChartTabContent({ isLoading, error, chartData }: ChartTabContent
   }
 
   return (
-    <div ref={containerRef} style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* Header */}
       <div style={{
         padding: '8px 12px',
         backgroundColor: '#f8f9fa',
         borderRadius: '4px',
         fontSize: '14px',
-        flexShrink: 0,
-        marginBottom: '12px'
+        flexShrink: 0
       }}>
         <div style={{ fontWeight: 600 }}>{chartData.variable_name || 'Groundwater Level'}</div>
         <div style={{ color: '#666' }}>
@@ -92,14 +72,13 @@ export function ChartTabContent({ isLoading, error, chartData }: ChartTabContent
         </div>
       </div>
 
-      <div style={{ flex: 1 }}>
+      {/* Chart */}
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
         <LineChart
-          width={dimensions.width}
-          height={dimensions.height}
           series={[{ data: chartData.data.map(d => d.value), area: true, color: '#3498db' }]}
           xAxis={[{ data: chartData.data.map(d => new Date(d.date)), scaleType: 'time' }]}
           yAxis={[{ label: 'Depth To Water Level (ft)', scaleType: 'linear', min: 0 }]}
-          margin={{ left: 20, right: 20, top: 20, bottom: 0 }}
+          margin={{ left: 20, right: 20, top: 20, bottom: 20 }}
         />
       </div>
     </div>
