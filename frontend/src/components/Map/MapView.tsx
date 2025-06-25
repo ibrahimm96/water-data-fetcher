@@ -6,6 +6,7 @@ import { getSiteHistoricalChartData } from '../../lib/groundwater/getSiteHistori
 import { getSiteHistoricalSummary } from '../../lib/groundwater/getSiteHistoricalSummary'
 import type { GroundwaterMonitoringSite } from '../../lib/groundwater/types'
 import type { MapViewProps } from './MapUtils'
+import { sitesToEnhancedGeoJSON, formatSitePopupContent } from '../../lib/groundwater/dataUtils'
 
 const mapboxAccessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || ''
 if (!mapboxAccessToken) {
@@ -57,22 +58,7 @@ export function MapView({
   }, [sites, measurementFilter, setFilteredSiteCount])
 
   const geojsonData = useMemo(() => {
-    const validSites = filteredSites.filter(site => site.geometry?.type === 'Point')
-    
-    return {
-      type: 'FeatureCollection' as const,
-      features: validSites.map(site => ({
-        type: 'Feature' as const,
-        geometry: site.geometry as GeoJSON.Geometry,
-        properties: {
-          monitoring_location_id: site.monitoring_location_id,
-          monitoring_location_name: site.monitoring_location_name || 'Unnamed Site',
-          county_code: site.county_code,
-          state_code: site.state_code,
-          measurement_count: site.measurement_count || 0
-        }
-      }))
-    }
+    return sitesToEnhancedGeoJSON(filteredSites)
   }, [filteredSites])
 
   // Map initialization effect - runs only once
@@ -137,14 +123,24 @@ export function MapView({
           data: { type: 'FeatureCollection', features: [] }
         })
 
-        // Add sites layer
+        // Add sites layer with centralized styling
         newMap.addLayer({
           id: 'site-points',
           type: 'circle',
           source: 'sites',
           paint: {
-            'circle-color': '#3498db',
-            'circle-radius': 8,
+            'circle-color': [
+              'case',
+              ['>=', ['get', 'measurement_count'], 10], '#e74c3c',
+              ['>=', ['get', 'measurement_count'], 3], '#f39c12',
+              '#3498db'
+            ],
+            'circle-radius': [
+              'case',
+              ['>=', ['get', 'measurement_count'], 10], 10,
+              ['>=', ['get', 'measurement_count'], 3], 8,
+              8
+            ],
             'circle-stroke-width': 2,
             'circle-stroke-color': '#ffffff'
           }
@@ -196,13 +192,15 @@ export function MapView({
 
           new mapboxgl.Popup()
             .setLngLat(coords)
-            .setHTML(`
-              <div style="padding: 10px; font-size: 14px;">
-                <strong>${siteName}</strong><br/>
-                Site ID: ${siteId}<br/>
-                WIP
-              </div>
-            `)
+            .setHTML(formatSitePopupContent(
+              siteName,
+              siteId,
+              props.measurement_count,
+              {
+                'County': props.county_code,
+                'State': props.state_code
+              }
+            ))
             .addTo(newMap)
         } catch (err) {
           setChartError(err instanceof Error ? err.message : 'Failed to load data')

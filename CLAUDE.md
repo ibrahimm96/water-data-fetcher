@@ -111,7 +111,10 @@ The frontend is a React/TypeScript application located in the `frontend/` direct
 ### Key Frontend Components
 
 - `MapView.tsx`: Main map component with Mapbox integration and clustering
+- `DraggablePanel.tsx`: Draggable panel with tabbed interface for site details, charts, and data tables
+- `ChartTab.tsx`: Time series chart visualization using MUI X Charts
 - `supabase.ts`: Database client and API functions for fetching groundwater data
+- `dataUtils.ts`: **NEW** Centralized data processing utilities for consistent styling and formatting
 - `App.tsx`: Root application component
 
 ### Frontend Features
@@ -121,6 +124,8 @@ The frontend is a React/TypeScript application located in the `frontend/` direct
 - **Smart Clustering**: Sites automatically cluster/uncluster based on zoom level (max zoom 10, 30px radius)
 - **Color-coded Markers**: Sites colored by measurement data volume (red: 10+, orange: 3-10, blue: 0-3)
 - **Rich Popups**: Detailed site information including latest measurements, data spans, and temporal information
+- **Draggable Data Panels**: Interactive panels with Chart, Statistics, and Data Table tabs for detailed site analysis
+- **Centralized Data Processing**: Consistent styling and formatting across map markers and data panels
 - **Professional UI**: Dark theme with water3D branding and top navigation banner
 - **Layer Controls**: Checkbox interface for "Groundwater Historical Sites" layer
 - **Floating Legend**: Overlay legend showing data volume indicators and site counts
@@ -143,10 +148,12 @@ npm run dev
 ### Frontend Data Flow
 
 1. `fetchAllSitesWithMeasurementData()` retrieves all sites with measurement counts and temporal data
-2. Sites are converted to GeoJSON format for Mapbox clustering
-3. Mapbox renders clustered/individual markers with color coding based on measurement volume
-4. Click events show detailed popups with formatted temporal information
-5. Sidebar overlay provides layer controls without affecting map size or position
+2. Sites are processed through centralized `dataUtils.ts` functions for consistent formatting
+3. `sitesToEnhancedGeoJSON()` converts sites to GeoJSON format with standardized marker styling
+4. Mapbox renders clustered/individual markers with color coding based on measurement volume
+5. Click events show detailed popups using `formatSitePopupContent()` for consistent formatting
+6. Site selection opens draggable panels with formatted chart data and data quality indicators
+7. Sidebar overlay provides layer controls without affecting map size or position
 
 ### Frontend Layout Structure
 
@@ -154,6 +161,7 @@ npm run dev
 - **Map Container**: Full viewport underneath all overlays (z-index: 1)
 - **Sidebar Overlay**: Slides in/out from left (300px width, z-index: 100)
 - **Toggle Button**: Appears when sidebar closed (z-index: 200)
+- **Draggable Panels**: Interactive data panels (z-index: 2000)
 - **Legend Overlay**: Fixed top-right position (z-index: 1000)
 
 ### CSS Architecture
@@ -162,6 +170,30 @@ npm run dev
 - **Fixed positioning** for html, body, #root, and main container
 - **Overlay design** where map stays full-width and sidebar slides over it
 - **TypeScript integration** with proper GeoJSON and Mapbox types
+
+### Centralized Data Processing (NEW)
+
+The `frontend/src/lib/groundwater/dataUtils.ts` module provides centralized utilities for consistent data processing across components:
+
+#### Key Functions
+- `sitesToEnhancedGeoJSON()`: Converts monitoring sites to GeoJSON with consistent marker styling
+- `getMarkerStyle()`: Standardized marker colors and sizes based on measurement count
+- `formatSitePopupContent()`: Consistent popup formatting with site information
+- `formatChartData()`: Standardized chart data formatting for panels
+- `getDataQuality()`: Data quality indicators (high/medium/low) with color coding
+- `formatDate()`: Consistent date formatting across components
+
+#### Data Quality System
+- **High**: 10+ measurements (green badge, red markers)
+- **Medium**: 3-9 measurements (orange badge, orange markers)  
+- **Low**: 0-2 measurements (gray badge, blue markers)
+
+#### Benefits
+- Consistent styling across map markers and data panels
+- Centralized color scheme and sizing logic
+- Standardized popup and data formatting
+- Enhanced maintainability and code reuse
+- Type-safe data transformations
 
 ### Database Schema
 

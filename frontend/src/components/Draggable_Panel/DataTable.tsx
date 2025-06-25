@@ -1,5 +1,6 @@
 import type { Key } from 'react'
 import type { ChartTabContentProps } from './ChartTab'
+import { formatDate, getDataQuality } from '../../lib/groundwater/dataUtils'
 
 type DataTableProps = {
   data: NonNullable<ChartTabContentProps['chartData']>['data']
@@ -7,6 +8,8 @@ type DataTableProps = {
 }
 
 export function DataTable({ data, unit }: DataTableProps) {
+  const dataQuality = getDataQuality(data.length)
+  
   return (
     <div style={{ maxHeight: '100%', overflowY: 'auto' }}>
       <div style={{
@@ -14,9 +17,22 @@ export function DataTable({ data, unit }: DataTableProps) {
         fontSize: '13.5px',
         marginBottom: '8px',
         borderBottom: '1px solid #ddd',
-        paddingBottom: '4px'
+        paddingBottom: '4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between'
       }}>
-        Measurement Table
+        <span>Measurement Table ({data.length.toLocaleString()} records)</span>
+        <span style={{
+          padding: '2px 6px',
+          backgroundColor: dataQuality.color,
+          color: 'white',
+          borderRadius: '3px',
+          fontSize: '10px',
+          fontWeight: '500'
+        }}>
+          {dataQuality.level.toUpperCase()}
+        </span>
       </div>
       <table style={{ width: '100%', fontSize: '12.5px', borderCollapse: 'collapse' }}>
         <thead>
@@ -28,7 +44,7 @@ export function DataTable({ data, unit }: DataTableProps) {
         <tbody>
           {data.map((row: { date: string | number | Date; value: number }, idx: Key | null | undefined) => (
             <tr key={idx}>
-              <td style={{ padding: '4px 8px', color: '#2c3e50' }}>{new Date(row.date).toLocaleDateString()}</td>
+              <td style={{ padding: '4px 8px', color: '#2c3e50' }}>{formatDate(row.date)}</td>
               <td style={{ padding: '4px 8px', color: '#2c3e50' }}>{row.value.toFixed(2)}</td>
             </tr>
           ))}

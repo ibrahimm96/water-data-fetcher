@@ -1,4 +1,5 @@
 import { LineChart } from '@mui/x-charts/LineChart'
+import { formatDate } from '../../lib/groundwater/dataUtils'
 
 export interface ChartTabContentProps {
   isLoading: boolean
@@ -10,13 +11,6 @@ export interface ChartTabContentProps {
     dateRange: { start: string; end: string } | null
     totalPoints: number
   } | null
-}
-const formatDate = (timestamp: number) => {
-  return new Date(timestamp).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
 }
 
 export function ChartTabContent({ isLoading, error, chartData }: ChartTabContentProps) {

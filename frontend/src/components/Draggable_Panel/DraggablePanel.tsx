@@ -4,6 +4,7 @@ import { ChartTabContent } from './ChartTab'
 import { DataTable } from './DataTable'
 import { StatisticsTabContent } from './StatisticsTab'
 import type { ChartTabContentProps } from './ChartTab'
+import { getDataQuality } from '../../lib/groundwater/dataUtils'
 
 interface DraggablePanelProps {
   siteId: string
@@ -28,6 +29,10 @@ export function DraggablePanel({
   const [size] = useState({ width: 600, height: 400 })
 
   const nodeRef = useRef<HTMLDivElement>(null!)
+
+  // Use centralized data formatting
+  // const formattedChartData = chartData ? formatChartData(chartData, siteName, siteId) : null
+  const dataQuality = chartData ? getDataQuality(chartData.totalPoints) : null
 
   if (!isVisible) return null
 
@@ -69,6 +74,19 @@ export function DraggablePanel({
             </h3>
             <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
               Site ID: {siteId}
+              {dataQuality && (
+                <span style={{ 
+                  marginLeft: '8px', 
+                  padding: '2px 6px', 
+                  backgroundColor: dataQuality.color, 
+                  color: 'white', 
+                  borderRadius: '3px',
+                  fontSize: '10px',
+                  fontWeight: '500'
+                }}>
+                  {dataQuality.level.toUpperCase()}
+                </span>
+              )}
             </div>
           </div>
           <button
