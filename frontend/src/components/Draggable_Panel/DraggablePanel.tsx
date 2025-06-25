@@ -4,7 +4,7 @@ import { ChartTabContent } from './ChartTab'
 import { DataTable } from './DataTable'
 import { StatisticsTabContent } from './StatisticsTab'
 import type { ChartTabContentProps } from './ChartTab'
-import { getDataQuality } from '../../lib/groundwater/dataUtils'
+import { getDataQuality, getDataCache } from '../../lib/groundwater/dataUtils'
 
 interface DraggablePanelProps {
   siteId: string
@@ -30,9 +30,14 @@ export function DraggablePanel({
 
   const nodeRef = useRef<HTMLDivElement>(null!)
 
-  // Use centralized data formatting
-  // const formattedChartData = chartData ? formatChartData(chartData, siteName, siteId) : null
+  // Use centralized data formatting and caching
+  const cache = getDataCache()
   const dataQuality = chartData ? getDataQuality(chartData.totalPoints) : null
+  
+  // Cache the data for future access
+  if (chartData) {
+    cache.setTimeSeriesData(siteId, chartData)
+  }
 
   if (!isVisible) return null
 

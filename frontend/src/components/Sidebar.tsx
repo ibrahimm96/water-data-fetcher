@@ -1,6 +1,6 @@
 import { Range } from 'react-range'
-import { ExportCSVButton } from './ExportCSVButton'
 import type { GroundwaterMonitoringSite } from '../lib/groundwater/types'
+import { exportSitesData } from '../lib/groundwater/dataUtils'
 
 type SiteWithCount = GroundwaterMonitoringSite & {
   measurement_count?: number
@@ -31,6 +31,10 @@ export function Sidebar({
   filteredSiteCount,
   filteredSites
 }: SidebarProps) {
+  // Handle centralized CSV export
+  const handleExportCSV = () => {
+    exportSitesData(filteredSites, 'groundwater_sites.csv')
+  }
   const sliderValues = [
     measurementFilter.min,
     measurementFilter.max === null ? MAX : measurementFilter.max
@@ -187,7 +191,22 @@ export function Sidebar({
           (<strong style={{ color: '#3498db' }}>{filteredSiteCount.toLocaleString()}</strong> total)
         </div>
         <div style={{ marginTop: '16px' }}>
-          <ExportCSVButton data={filteredSites} />
+          <button
+            onClick={handleExportCSV}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: '#3498db',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '14px',
+              width: '100%'
+            }}
+          >
+            Export Filtered Sites
+          </button>
         </div>
       </div>
     </div>

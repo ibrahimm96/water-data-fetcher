@@ -44,7 +44,7 @@ export interface ProcessedTimeSeriesData {
   variable_name: string | null
   dateRange: { start: string; end: string } | null
   totalPoints: number
-  rawData: RawTimeSeriesData[]
+  rawData?: RawTimeSeriesData[]
 }
 
 export interface SiteWithTimeSeriesData extends GroundwaterMonitoringSite {
@@ -149,18 +149,21 @@ class DataCache {
   }
 
   setTimeSeriesData(siteId: string, data: ProcessedTimeSeriesData): void {
-    this.timeSeriesCache.set(siteId, {
-      data,
-      timestamp: Date.now()
-    })
-    
-    // Update site with cached data
-    const site = this.sites.get(siteId)
-    if (site) {
-      site.timeSeriesData = data
-      site.lastFetched = Date.now()
-      site.isLoading = false
-      site.error = null
+    // Only cache if data is valid
+    if (data && data.data && Array.isArray(data.data)) {
+      this.timeSeriesCache.set(siteId, {
+        data,
+        timestamp: Date.now()
+      })
+      
+      // Update site with cached data
+      const site = this.sites.get(siteId)
+      if (site) {
+        site.timeSeriesData = data
+        site.lastFetched = Date.now()
+        site.isLoading = false
+        site.error = null
+      }
     }
   }
 
@@ -493,4 +496,48 @@ export function exportTimeSeriesData(
     `${safeSiteName}_timeseries_${new Date().toISOString().split("T")[0]}.csv`
   
   downloadCSV(csvContent, finalFilename)
+}
+
+/**
+ * Export sites data to CSV format
+ */
+export function exportSitesData(
+  sites: GroundwaterMonitoringSite[],
+  filename: string = 'groundwater_sites.csv'
+): void {
+  if (!sites || sites.length === 0) {
+    console.warn('No sites data to export')
+    return
+  }
+
+  const headers = [
+    'monitoring_location_id',
+    'monitoring_location_number', 
+    'monitoring_location_name',
+    'state_code',
+    'county_code',
+    'agency_code',
+    'measurement_count',
+    'latitude',
+    'longitude',
+    'data_quality'
+  ]
+
+  const rows = sites.map(site => {
+    const lat = site.geometry && 'coordinates' in site.geometry ? site.geometry.coordinates?.[1] ?? '' : ''
+    const lon = site.geometry && 'coordinates' in site.geometry ? site.geometry.coordinates?.[0] ?? '' : ''
+    const measurementCount = site.measurement_count || 0
+    const dataQuality = getDataQuality(measurementCount)
+
+    return headers.map(key => {
+      const value = key === 'latitude' ? lat :
+                    key === 'longitude' ? lon :
+                    key === 'data_quality' ? dataQuality.level :
+                    site[key as keyof GroundwaterMonitoringSite] ?? ''
+      return `"${String(value).replace(/"/g, '""')}"`
+    }).join(',')
+  })
+
+  const csvContent = [headers.join(','), ...rows].join('\n')
+  downloadCSV(csvContent, filename)
 }

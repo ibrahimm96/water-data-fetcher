@@ -6,7 +6,7 @@ import { getSiteHistoricalChartData } from '../../lib/groundwater/getSiteHistori
 import { getSiteHistoricalSummary } from '../../lib/groundwater/getSiteHistoricalSummary'
 import type { GroundwaterMonitoringSite } from '../../lib/groundwater/types'
 import type { MapViewProps } from './MapUtils'
-import { sitesToEnhancedGeoJSON, formatSitePopupContent } from '../../lib/groundwater/dataUtils'
+import { sitesToEnhancedGeoJSON, formatSitePopupContent, getDataCache } from '../../lib/groundwater/dataUtils'
 
 const mapboxAccessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || ''
 if (!mapboxAccessToken) {
@@ -32,12 +32,17 @@ export function MapView({
   const [error, setError] = useState<string | null>(null)
   const [mapReady, setMapReady] = useState(false)
   const [mapError, setMapError] = useState<string | null>(null)
+  
+  // Get centralized cache instance
+  const cache = getDataCache()
 
   useEffect(() => {
     const loadSites = async () => {
       try {
         const data = await getSitesWithHistoricalData()
         setSites(data)
+        // Cache sites data for centralized access
+        cache.setSites(data)
       } catch (err) {
         console.error('Failed to load sites:', err)
         setError(err instanceof Error ? err.message : 'Failed to load sites')
@@ -57,7 +62,10 @@ export function MapView({
     setLocalFilteredSites(filtered)
     setFilteredSites(filtered)
     setFilteredSiteCount(filtered.length)
-  }, [sites, measurementFilter, setFilteredSiteCount, setFilteredSites])
+    
+    // Update centralized cache with current filter
+    cache.setFilter(measurementFilter)
+  }, [sites, measurementFilter, setFilteredSiteCount, setFilteredSites, cache])
 
   const geojsonData = useMemo(() => {
     return sitesToEnhancedGeoJSON(localFilteredSites)
@@ -183,10 +191,19 @@ export function MapView({
           setChartError(null)
           setChartData(null)
 
-          const [, chart] = await Promise.all([
-            getSiteHistoricalSummary(siteId),
-            getSiteHistoricalChartData(siteId)
-          ])
+          // Check cache first
+          let chart = cache.getTimeSeriesData(siteId)
+          if (!chart) {
+            const [, chartData] = await Promise.all([
+              getSiteHistoricalSummary(siteId),
+              getSiteHistoricalChartData(siteId)
+            ])
+            chart = chartData
+            // Cache the data for future use
+            if (chart) {
+              cache.setTimeSeriesData(siteId, chart)
+            }
+          }
 
           setChartData(chart)
           setChartLoading(false)
