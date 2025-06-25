@@ -1,4 +1,10 @@
 import { Range } from 'react-range'
+import { ExportCSVButton } from './ExportCSVButton'
+import type { GroundwaterMonitoringSite } from '../lib/groundwater/types'
+
+type SiteWithCount = GroundwaterMonitoringSite & {
+  measurement_count?: number
+}
 
 interface SidebarProps {
   isOpen: boolean
@@ -9,6 +15,7 @@ interface SidebarProps {
   }
   onMeasurementFilterChange: (filter: { min: number; max: number | null }) => void
   filteredSiteCount: number
+  filteredSites: SiteWithCount[]
 }
 
 const STEP = 1
@@ -21,7 +28,8 @@ export function Sidebar({
   onClose,
   measurementFilter,
   onMeasurementFilterChange,
-  filteredSiteCount
+  filteredSiteCount,
+  filteredSites
 }: SidebarProps) {
   const sliderValues = [
     measurementFilter.min,
@@ -177,6 +185,9 @@ export function Sidebar({
           </strong> measurements
           <br />
           (<strong style={{ color: '#3498db' }}>{filteredSiteCount.toLocaleString()}</strong> total)
+        </div>
+        <div style={{ marginTop: '16px' }}>
+          <ExportCSVButton data={filteredSites} />
         </div>
       </div>
     </div>

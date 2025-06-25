@@ -1,14 +1,44 @@
 import type { Key } from 'react'
 import type { ChartTabContentProps } from './ChartTab'
-import { formatDate, getDataQuality } from '../../lib/groundwater/dataUtils'
+import { formatDate, getDataQuality, exportTimeSeriesData, downloadCSV, type RawTimeSeriesData } from '../../lib/groundwater/dataUtils'
 
 type DataTableProps = {
   data: NonNullable<ChartTabContentProps['chartData']>['data']
   unit: string | null
+  siteId?: string
+  siteName?: string
+  rawData?: RawTimeSeriesData[]
 }
 
-export function DataTable({ data, unit }: DataTableProps) {
+export function DataTable({ data, unit, siteId, siteName, rawData }: DataTableProps) {
   const dataQuality = getDataQuality(data.length)
+  
+  const downloadTimeSeriesCSV = () => {
+    if (rawData && rawData.length > 0) {
+      // Use centralized export with original raw data from database
+      exportTimeSeriesData(rawData, siteName, siteId, undefined, {
+        includeMetadata: true,
+        includeQualifiers: true,
+        dateFormat: 'iso'
+      })
+      return
+    }
+    
+    // Fallback to processed data if raw data not available
+    const headers = ['Date', `Value${unit ? ` (${unit})` : ''}`]
+    const csvRows = data.map(row => [
+      formatDate(new Date(row.date).getTime()),
+      row.value.toFixed(2)
+    ])
+    
+    const csvContent = [
+      headers.join(','),
+      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n')
+    
+    const filename = `${siteName || siteId || 'site'}_timeseries_data.csv`
+    downloadCSV(csvContent, filename)
+  }
   
   return (
     <div style={{ maxHeight: '100%', overflowY: 'auto' }}>
@@ -17,22 +47,39 @@ export function DataTable({ data, unit }: DataTableProps) {
         fontSize: '13.5px',
         marginBottom: '8px',
         borderBottom: '1px solid #ddd',
-        paddingBottom: '4px',
+        paddingBottom: '8px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between'
       }}>
-        <span>Measurement Table ({data.length.toLocaleString()} records)</span>
-        <span style={{
-          padding: '2px 6px',
-          backgroundColor: dataQuality.color,
-          color: 'white',
-          borderRadius: '3px',
-          fontSize: '10px',
-          fontWeight: '500'
-        }}>
-          {dataQuality.level.toUpperCase()}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span>Measurement Table ({data.length.toLocaleString()} records)</span>
+          <span style={{
+            padding: '2px 6px',
+            backgroundColor: dataQuality.color,
+            color: 'white',
+            borderRadius: '3px',
+            fontSize: '10px',
+            fontWeight: '500'
+          }}>
+            {dataQuality.level.toUpperCase()}
+          </span>
+        </div>
+        <button
+          onClick={downloadTimeSeriesCSV}
+          style={{
+            padding: '4px 8px',
+            backgroundColor: '#3498db',
+            color: 'white',
+            border: 'none',
+            borderRadius: '3px',
+            cursor: 'pointer',
+            fontWeight: '500',
+            fontSize: '11px'
+          }}
+        >
+          Download CSV
+        </button>
       </div>
       <table style={{ width: '100%', fontSize: '12.5px', borderCollapse: 'collapse' }}>
         <thead>
@@ -44,7 +91,7 @@ export function DataTable({ data, unit }: DataTableProps) {
         <tbody>
           {data.map((row: { date: string | number | Date; value: number }, idx: Key | null | undefined) => (
             <tr key={idx}>
-              <td style={{ padding: '4px 8px', color: '#2c3e50' }}>{formatDate(row.date)}</td>
+              <td style={{ padding: '4px 8px', color: '#2c3e50' }}>{formatDate(new Date(row.date).getTime())}</td>
               <td style={{ padding: '4px 8px', color: '#2c3e50' }}>{row.value.toFixed(2)}</td>
             </tr>
           ))}

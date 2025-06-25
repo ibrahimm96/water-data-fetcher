@@ -1,5 +1,5 @@
 import { LineChart } from '@mui/x-charts/LineChart'
-import { formatDate } from '../../lib/groundwater/dataUtils'
+import { formatDate, type RawTimeSeriesData } from '../../lib/groundwater/dataUtils'
 
 export interface ChartTabContentProps {
   isLoading: boolean
@@ -10,6 +10,7 @@ export interface ChartTabContentProps {
     variable_name: string | null
     dateRange: { start: string; end: string } | null
     totalPoints: number
+    rawData?: RawTimeSeriesData[]
   } | null
 }
 

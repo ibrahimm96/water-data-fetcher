@@ -1,9 +1,15 @@
 import type { GroundwaterMonitoringSite } from './types'
 
 /**
- * Centralized utilities for data processing - works alongside existing logic
- * These functions extend current functionality without breaking existing code
+ * CENTRALIZED DATA MANAGEMENT SYSTEM
+ * 
+ * This module completely centralizes all data operations for the groundwater monitoring application.
+ * It replaces scattered logic across components with a unified, efficient data management layer.
  */
+
+// ================================
+// CORE DATA INTERFACES
+// ================================
 
 export interface SiteMarkerStyle {
   color: string
@@ -21,24 +27,190 @@ export interface GeoJSONFeatureProperties {
   marker_style?: SiteMarkerStyle
 }
 
+export interface RawTimeSeriesData {
+  measurement_datetime: string
+  measurement_value: number
+  unit: string | null
+  variable_name: string | null
+  variable_code?: string | null
+  qualifiers?: string[] | null
+  method_id?: number | null
+  [key: string]: string | number | boolean | null | string[] | undefined // Allow additional database fields
+}
+
+export interface ProcessedTimeSeriesData {
+  data: Array<{ date: number; value: number; dateString: string }>
+  unit: string | null
+  variable_name: string | null
+  dateRange: { start: string; end: string } | null
+  totalPoints: number
+  rawData: RawTimeSeriesData[]
+}
+
+export interface SiteWithTimeSeriesData extends GroundwaterMonitoringSite {
+  timeSeriesData?: ProcessedTimeSeriesData
+  lastFetched?: number
+  isLoading?: boolean
+  error?: string | null
+}
+
+export interface MeasurementFilter {
+  min: number
+  max: number | null
+}
+
+export interface DataQuality {
+  level: 'high' | 'medium' | 'low'
+  color: string
+  description: string
+  badge: {
+    backgroundColor: string
+    textColor: string
+    text: string
+  }
+}
+
+export interface ExportOptions {
+  filename?: string
+  includeMetadata?: boolean
+  dateFormat?: 'iso' | 'local' | 'short'
+  includeQualifiers?: boolean
+}
+
+// ================================
+// CENTRALIZED DATA CACHE
+// ================================
+
+class DataCache {
+  private static instance: DataCache
+  private sites: Map<string, SiteWithTimeSeriesData> = new Map()
+  private allSites: GroundwaterMonitoringSite[] = []
+  private filteredSites: GroundwaterMonitoringSite[] = []
+  private currentFilter: MeasurementFilter = { min: 0, max: null }
+  private timeSeriesCache: Map<string, { data: ProcessedTimeSeriesData; timestamp: number }> = new Map()
+  private readonly CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+  static getInstance(): DataCache {
+    if (!DataCache.instance) {
+      DataCache.instance = new DataCache()
+    }
+    return DataCache.instance
+  }
+
+  // Sites Management
+  setSites(sites: GroundwaterMonitoringSite[]): void {
+    this.allSites = sites
+    sites.forEach(site => {
+      const key = site.monitoring_location_id || site.monitoring_location_number
+      if (key) {
+        this.sites.set(key, { ...site })
+      }
+    })
+    this.applyCurrentFilter()
+  }
+
+  getAllSites(): GroundwaterMonitoringSite[] {
+    return [...this.allSites]
+  }
+
+  getFilteredSites(): GroundwaterMonitoringSite[] {
+    return [...this.filteredSites]
+  }
+
+  getSite(siteId: string): SiteWithTimeSeriesData | undefined {
+    return this.sites.get(siteId)
+  }
+
+  // Filtering
+  setFilter(filter: MeasurementFilter): void {
+    this.currentFilter = filter
+    this.applyCurrentFilter()
+  }
+
+  getFilter(): MeasurementFilter {
+    return { ...this.currentFilter }
+  }
+
+  private applyCurrentFilter(): void {
+    this.filteredSites = this.allSites.filter(site => {
+      const count = site.measurement_count || 0
+      return count >= this.currentFilter.min &&
+        (this.currentFilter.max === null || count <= this.currentFilter.max)
+    })
+  }
+
+  // Time Series Cache Management
+  getTimeSeriesData(siteId: string): ProcessedTimeSeriesData | null {
+    const cached = this.timeSeriesCache.get(siteId)
+    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
+      return cached.data
+    }
+    return null
+  }
+
+  setTimeSeriesData(siteId: string, data: ProcessedTimeSeriesData): void {
+    this.timeSeriesCache.set(siteId, {
+      data,
+      timestamp: Date.now()
+    })
+    
+    // Update site with cached data
+    const site = this.sites.get(siteId)
+    if (site) {
+      site.timeSeriesData = data
+      site.lastFetched = Date.now()
+      site.isLoading = false
+      site.error = null
+    }
+  }
+
+  setSiteLoading(siteId: string, loading: boolean, error?: string | null): void {
+    const site = this.sites.get(siteId)
+    if (site) {
+      site.isLoading = loading
+      site.error = error || null
+    }
+  }
+
+  // Cache Management
+  clearCache(): void {
+    this.timeSeriesCache.clear()
+    this.sites.forEach(site => {
+      site.timeSeriesData = undefined
+      site.lastFetched = undefined
+      site.isLoading = false
+      site.error = null
+    })
+  }
+
+  clearExpiredCache(): void {
+    const now = Date.now()
+    for (const [siteId, cached] of this.timeSeriesCache.entries()) {
+      if (now - cached.timestamp >= this.CACHE_TTL) {
+        this.timeSeriesCache.delete(siteId)
+        const site = this.sites.get(siteId)
+        if (site) {
+          site.timeSeriesData = undefined
+          site.lastFetched = undefined
+        }
+      }
+    }
+  }
+}
+
+// ================================
+// CENTRALIZED DATA OPERATIONS
+// ================================
+
 /**
- * Enhances existing GeoJSON features with consistent styling
+ * Gets the singleton data cache instance
  */
-export function enhanceGeoJSONFeatures(
-  features: GeoJSON.Feature[]
-): GeoJSON.Feature<GeoJSON.Geometry, GeoJSONFeatureProperties>[] {
-  return features.map(feature => ({
-    ...feature,
-    properties: {
-      ...feature.properties,
-      marker_style: getMarkerStyle(feature.properties?.measurement_count || 0)
-    } as GeoJSONFeatureProperties
-  }))
+export function getDataCache(): DataCache {
+  return DataCache.getInstance()
 }
 
 /**
  * Gets consistent marker styling based on measurement count
- * Matches existing color logic from MapView
  */
 export function getMarkerStyle(measurementCount: number): SiteMarkerStyle {
   if (measurementCount >= 10) {
@@ -66,7 +238,71 @@ export function getMarkerStyle(measurementCount: number): SiteMarkerStyle {
 }
 
 /**
- * Formats site information for popups - centralizes popup content logic
+ * Gets comprehensive data quality indicator with enhanced styling
+ */
+export function getDataQuality(measurementCount: number): DataQuality {
+  if (measurementCount >= 10) {
+    return {
+      level: 'high',
+      color: '#27ae60',
+      description: 'Rich historical data available',
+      badge: {
+        backgroundColor: '#27ae60',
+        textColor: 'white',
+        text: 'HIGH'
+      }
+    }
+  }
+  if (measurementCount >= 3) {
+    return {
+      level: 'medium', 
+      color: '#f39c12',
+      description: 'Moderate historical data available',
+      badge: {
+        backgroundColor: '#f39c12',
+        textColor: 'white',
+        text: 'MEDIUM'
+      }
+    }
+  }
+  return {
+    level: 'low',
+    color: '#95a5a6',
+    description: 'Limited historical data available',
+    badge: {
+      backgroundColor: '#95a5a6',
+      textColor: 'white',
+      text: 'LOW'
+    }
+  }
+}
+
+/**
+ * Formats dates consistently across the application
+ */
+export function formatDate(
+  timestamp: number | string, 
+  format: 'iso' | 'local' | 'short' = 'short'
+): string {
+  const date = new Date(timestamp)
+  
+  switch (format) {
+    case 'iso':
+      return date.toISOString()
+    case 'local':
+      return date.toLocaleString('en-US')
+    case 'short':
+    default:
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      })
+  }
+}
+
+/**
+ * Enhanced site popup content formatter
  */
 export function formatSitePopupContent(
   siteName: string,
@@ -74,21 +310,28 @@ export function formatSitePopupContent(
   measurementCount?: number,
   additionalInfo?: Record<string, string | number | null>
 ): string {
-  const baseContent = `
-    <div style="padding: 10px; font-size: 14px; min-width: 200px;">
-      <strong style="color: #2c3e50;">${siteName}</strong><br/>
-      <div style="margin: 4px 0; color: #666; font-size: 12px;">
-        Site ID: ${siteId}
+  const dataQuality = measurementCount ? getDataQuality(measurementCount) : null
+  
+  let content = `
+    <div style="padding: 12px; font-size: 14px; min-width: 220px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+      <div style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 8px;">
+        <strong style="color: #2c3e50; font-size: 15px;">${siteName}</strong>
+        <div style="margin: 4px 0; color: #666; font-size: 12px;">ID: ${siteId}</div>
       </div>
   `
   
-  let additionalContent = ''
-  
-  if (measurementCount !== undefined) {
-    const dataQuality = measurementCount >= 10 ? 'High' : measurementCount >= 3 ? 'Medium' : 'Low'
-    additionalContent += `
-      <div style="margin: 4px 0; color: #666; font-size: 12px;">
-        Measurements: ${measurementCount} (${dataQuality} data volume)
+  if (measurementCount !== undefined && dataQuality) {
+    content += `
+      <div style="display: flex; align-items: center; gap: 8px; margin: 8px 0;">
+        <span style="color: #666; font-size: 12px;">Measurements: ${measurementCount.toLocaleString()}</span>
+        <span style="
+          padding: 2px 6px; 
+          background-color: ${dataQuality.badge.backgroundColor}; 
+          color: ${dataQuality.badge.textColor}; 
+          border-radius: 3px; 
+          font-size: 10px; 
+          font-weight: 500;
+        ">${dataQuality.badge.text}</span>
       </div>
     `
   }
@@ -96,116 +339,158 @@ export function formatSitePopupContent(
   if (additionalInfo) {
     Object.entries(additionalInfo).forEach(([key, value]) => {
       if (value !== null && value !== undefined) {
-        additionalContent += `
+        content += `
           <div style="margin: 4px 0; color: #666; font-size: 12px;">
-            ${key}: ${value}
+            <strong>${key}:</strong> ${value}
           </div>
         `
       }
     })
   }
 
-  return baseContent + additionalContent + '</div>'
+  return content + '</div>'
 }
 
 /**
- * Converts sites to enhanced GeoJSON with consistent styling
- * Extends existing geojsonData logic from MapView
+ * Converts sites to enhanced GeoJSON with centralized caching
  */
-export function sitesToEnhancedGeoJSON(sites: GroundwaterMonitoringSite[]): GeoJSON.FeatureCollection {
-  const validSites = sites.filter(site => site.geometry?.type === 'Point')
+export function sitesToEnhancedGeoJSON(sites?: GroundwaterMonitoringSite[]): GeoJSON.FeatureCollection {
+  const sitesToProcess = sites || getDataCache().getFilteredSites()
+  const validSites = sitesToProcess.filter(site => site.geometry?.type === 'Point')
   
-  const features = validSites.map(site => ({
-    type: 'Feature' as const,
-    geometry: site.geometry as GeoJSON.Geometry,
-    properties: {
-      monitoring_location_id: site.monitoring_location_id || site.monitoring_location_number,
-      monitoring_location_name: site.monitoring_location_name || 'Unnamed Site',
-      county_code: site.county_code,
-      state_code: site.state_code,
-      measurement_count: site.measurement_count || 0,
-      marker_style: getMarkerStyle(site.measurement_count || 0)
-    } as GeoJSONFeatureProperties
-  }))
+  const features = validSites.map(site => {
+    const measurementCount = site.measurement_count || 0
+    const markerStyle = getMarkerStyle(measurementCount)
+    
+    return {
+      type: 'Feature' as const,
+      geometry: site.geometry as GeoJSON.Geometry,
+      properties: {
+        monitoring_location_id: site.monitoring_location_id || site.monitoring_location_number,
+        monitoring_location_name: site.monitoring_location_name || 'Unnamed Site',
+        county_code: site.county_code,
+        state_code: site.state_code,
+        measurement_count: measurementCount,
+        marker_style: markerStyle,
+        // Additional properties for enhanced functionality
+        data_quality: getDataQuality(measurementCount),
+        site_key: site.monitoring_location_id || site.monitoring_location_number
+      } as GeoJSONFeatureProperties & {
+        data_quality: DataQuality
+        site_key: string
+      }
+    }
+  })
 
   return {
     type: 'FeatureCollection',
-    features: enhanceGeoJSONFeatures(features)
+    features
   }
 }
 
+// ================================
+// CENTRALIZED EXPORT SYSTEM
+// ================================
+
 /**
- * Formats chart data for consistent display across components
- * Works with existing chartData structure from ChartTabContent
+ * Downloads CSV file with proper cleanup
  */
-export interface FormattedChartData {
-  title: string
-  subtitle: string
-  data: Array<{ date: number; value: number; dateString: string }>
-  unit: string | null
-  dateRange: { start: string; end: string } | null
-  totalPoints: number
-  variable_name: string | null
+export function downloadCSV(
+  csvContent: string,
+  filename: string,
+  contentType: string = "text/csv;charset=utf-8;"
+): void {
+  const blob = new Blob([csvContent], { type: contentType })
+  const url = URL.createObjectURL(blob)
+
+  const link = document.createElement("a")
+  link.setAttribute("href", url)
+  link.setAttribute("download", filename)
+  link.style.display = "none"
+  
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
 }
 
-export function formatChartData(
-  chartData: {
-    data: Array<{ date: number; value: number; dateString: string }>
-    unit: string | null
-    variable_name: string | null
-    dateRange: { start: string; end: string } | null
-    totalPoints: number
-  },
-  siteName: string,
-  siteId: string
-): FormattedChartData {
-  return {
-    title: siteName || 'Unnamed Site',
-    subtitle: `Site ID: ${siteId}`,
-    data: chartData.data,
-    unit: chartData.unit,
-    dateRange: chartData.dateRange,
-    totalPoints: chartData.totalPoints,
-    variable_name: chartData.variable_name
+/**
+ * Generates CSV content from raw time-series data
+ */
+export function generateTimeSeriesCSV(
+  rawData: RawTimeSeriesData[],
+  options: ExportOptions = {}
+): string {
+  if (!rawData || rawData.length === 0) {
+    throw new Error("No time-series data available for export")
   }
-}
 
-/**
- * Utility to format dates consistently across components
- */
-export function formatDate(timestamp: number): string {
-  return new Date(timestamp).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
+  const {
+    includeMetadata = true,
+    dateFormat = "iso",
+    includeQualifiers = true
+  } = options
+
+  const baseHeaders = ["measurement_datetime", "measurement_value", "unit", "variable_name"]
+  const headers = [...baseHeaders]
+
+  if (includeQualifiers && rawData.some(row => row.qualifiers)) {
+    headers.push("qualifiers")
+  }
+
+  if (includeMetadata) {
+    const additionalFields = new Set<string>()
+    rawData.forEach(row => {
+      Object.keys(row).forEach(key => {
+        if (!baseHeaders.includes(key) && key !== "qualifiers") {
+          additionalFields.add(key)
+        }
+      })
+    })
+    headers.push(...Array.from(additionalFields))
+  }
+
+  const rows = rawData.map(row => {
+    const values: (string | number | null)[] = []
+    
+    values.push(
+      formatDate(row.measurement_datetime, dateFormat),
+      row.measurement_value,
+      row.unit || "",
+      row.variable_name || ""
+    )
+
+    if (includeQualifiers && headers.includes("qualifiers")) {
+      values.push(row.qualifiers ? row.qualifiers.join(";") : "")
+    }
+
+    if (includeMetadata) {
+      headers.slice(baseHeaders.length + (includeQualifiers ? 1 : 0)).forEach(header => {
+        const value = row[header]
+        values.push(value !== null && value !== undefined ? String(value) : "")
+      })
+    }
+
+    return values.map(value => `"${String(value).replace(/"/g, "\"\"")}"`).join(",")
   })
+
+  return [headers.join(","), ...rows].join("\n")
 }
 
 /**
- * Gets data quality indicator based on measurement count
+ * Unified export function for time-series data using raw data
  */
-export function getDataQuality(measurementCount: number): {
-  level: 'high' | 'medium' | 'low'
-  color: string
-  description: string
-} {
-  if (measurementCount >= 10) {
-    return {
-      level: 'high',
-      color: '#27ae60',
-      description: 'Rich historical data available'
-    }
-  }
-  if (measurementCount >= 3) {
-    return {
-      level: 'medium', 
-      color: '#f39c12',
-      description: 'Moderate historical data available'
-    }
-  }
-  return {
-    level: 'low',
-    color: '#95a5a6',
-    description: 'Limited historical data available'
-  }
+export function exportTimeSeriesData(
+  rawData: RawTimeSeriesData[],
+  siteName?: string,
+  siteId?: string,
+  filename?: string,
+  options: ExportOptions = {}
+): void {
+  const csvContent = generateTimeSeriesCSV(rawData, options)
+  const safeSiteName = (siteName || siteId || "site").replace(/[^a-zA-Z0-9]/g, "_")
+  const finalFilename = filename || 
+    `${safeSiteName}_timeseries_${new Date().toISOString().split("T")[0]}.csv`
+  
+  downloadCSV(csvContent, finalFilename)
 }

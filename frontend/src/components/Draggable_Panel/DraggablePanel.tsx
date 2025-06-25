@@ -137,7 +137,13 @@ export function DraggablePanel({
           )}
           {activeTab === 'table' && chartData?.data?.length ? (
             <div style={{ height: '100%', overflowY: 'auto' }}>
-              <DataTable data={chartData.data} unit={chartData.unit} />
+              <DataTable 
+                data={chartData.data} 
+                unit={chartData.unit}
+                siteId={siteId}
+                siteName={siteName}
+                rawData={chartData.rawData}
+              />
             </div>
           ) : null}
         </div>

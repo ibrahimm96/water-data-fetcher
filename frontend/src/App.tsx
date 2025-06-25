@@ -3,6 +3,7 @@ import { MapView } from './components/Map/MapView'
 import { Sidebar } from './components/Sidebar'
 import { DraggablePanel } from './components/Draggable_Panel/DraggablePanel'
 import { MapSettingsPanel } from './components/MapSettingsPanel'
+import type { GroundwaterMonitoringSite } from './lib/groundwater/types'
 import './App.css'
 
 function App() {
@@ -23,6 +24,7 @@ function App() {
   })
 
   const [filteredSiteCount, setFilteredSiteCount] = useState(0)
+  const [filteredSites, setFilteredSites] = useState<GroundwaterMonitoringSite[]>([])
 
   return (
     <div style={{
@@ -89,7 +91,7 @@ function App() {
           measurementFilter={measurementFilter}
           onMeasurementFilterChange={setMeasurementFilter}
           filteredSiteCount={filteredSiteCount}
-        />
+          filteredSites={filteredSites}        />
         {!sidebarOpen && (
           <button
             onClick={() => setSidebarOpen(true)}
@@ -120,7 +122,8 @@ function App() {
           setChartError={setChartError}
           setChartLoading={setChartLoading}
           setSelectedSite={setSelectedSite}
-          setFilteredSiteCount={setFilteredSiteCount}    
+          setFilteredSiteCount={setFilteredSiteCount}
+          setFilteredSites={setFilteredSites}
         />
 
         <DraggablePanel

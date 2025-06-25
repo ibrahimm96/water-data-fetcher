@@ -35,6 +35,7 @@ export const getSiteHistoricalChartData = async (locationId: string) => {
       start: data[0].measurement_datetime,
       end: data[data.length - 1].measurement_datetime
     },
-    totalPoints: data.length
+    totalPoints: data.length,
+    rawData: data  // Include the original raw data from database
   }
 }

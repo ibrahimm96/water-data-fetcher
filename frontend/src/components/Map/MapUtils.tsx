@@ -13,6 +13,8 @@ export interface ChartData {
 //   enable3DTerrain: boolean
 // }
 
+import type { GroundwaterMonitoringSite } from '../../lib/groundwater/types'
+
 export interface MapViewProps {
   measurementFilter: {
     min: number
@@ -24,5 +26,6 @@ export interface MapViewProps {
   setChartLoading: (loading: boolean) => void
   setSelectedSite: (site: { id: string; name: string } | null) => void
   setFilteredSiteCount: (count: number) => void
+  setFilteredSites: (sites: GroundwaterMonitoringSite[]) => void
   //mapSettings: MapSettings
 }

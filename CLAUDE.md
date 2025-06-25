@@ -209,3 +209,152 @@ The frontend connects to two main Supabase tables:
 - Links to sites via `monitoring_location_id`
 - Includes measurement values, timestamps, units, and quality indicators
 - Used for data volume calculations and measurement displays
+
+## Centralized Data Management System (NEW)
+
+The frontend now features a comprehensive centralized data management system that replaces scattered data operations with a unified, efficient approach.
+
+### Core Components
+
+#### **Enhanced dataUtils.ts** - Central Data Hub
+- **Location**: `frontend/src/lib/groundwater/dataUtils.ts`
+- **Purpose**: Centralized data operations, caching, and export functionality
+- **Key Features**:
+  - Singleton DataCache with intelligent TTL management
+  - Unified CSV export system for sites and time-series data
+  - Raw database data preservation and processing
+  - Consistent data transformations and styling
+  - Backward compatibility with legacy functions
+
+#### **Data Cache System**
+```typescript
+// Access the centralized cache
+import { getDataCache } from '../lib/groundwater/dataUtils'
+
+const cache = getDataCache()
+const filteredSites = cache.getFilteredSites()
+const timeSeriesData = cache.getTimeSeriesData(siteId)
+```
+
+#### **Export System**
+```typescript
+// Export filtered sites data
+exportSitesData(sites, filename, options)
+
+// Export raw time-series data with all database fields
+exportTimeSeriesData(rawData, siteName, siteId, filename, options)
+```
+
+### Key Interfaces
+
+#### **RawTimeSeriesData**
+```typescript
+interface RawTimeSeriesData {
+  measurement_datetime: string
+  measurement_value: number
+  unit: string | null
+  variable_name: string | null
+  variable_code?: string | null
+  qualifiers?: string[] | null
+  method_id?: number | null
+  [key: string]: string | number | boolean | null | string[] | undefined
+}
+```
+
+#### **ProcessedTimeSeriesData**
+```typescript
+interface ProcessedTimeSeriesData {
+  data: Array<{ date: number; value: number; dateString: string }>
+  unit: string | null
+  variable_name: string | null
+  dateRange: { start: string; end: string } | null
+  totalPoints: number
+  rawData: RawTimeSeriesData[] // Original database records
+}
+```
+
+### Data Flow Architecture
+
+#### **Original Database Data Preservation**
+1. **Raw Data Fetching**: `getSiteHistoricalChartData()` includes `rawData` field with complete database records
+2. **Component Integration**: DraggablePanel → DataTable receives raw data for export
+3. **Export Functionality**: DataTable download button exports original database data with all fields
+
+#### **Cache Management**
+- **Sites Cache**: All monitoring sites with measurement counts and metadata
+- **Time-Series Cache**: Individual site data with 5-minute TTL
+- **Filter State**: Centralized measurement count filtering
+- **Automatic Cleanup**: Expired cache entries removed automatically
+
+### Export Capabilities
+
+#### **Sites Export** (Sidebar CSV Button)
+- **Standard Fields**: Site IDs, names, coordinates, measurement counts
+- **Enhanced Metadata**: Data quality levels and descriptions
+- **Filtering**: Exports only currently filtered sites
+- **Filename**: Auto-generated with date stamp
+
+#### **Time-Series Export** (DataTable CSV Button) 
+- **Raw Database Fields**: Complete original data structure
+- **Configurable Options**:
+  - `includeMetadata`: All additional database fields
+  - `includeQualifiers`: Data quality indicators
+  - `dateFormat`: ISO, local, or short format
+- **Intelligent Fallback**: Uses processed data if raw data unavailable
+- **Filename**: Site-specific with timestamp
+
+### Usage Examples
+
+#### **Centralized Site Management**
+```typescript
+// Set and filter sites
+const cache = getDataCache()
+cache.setSites(allSites)
+cache.setFilter({ min: 10, max: null })
+const filteredSites = cache.getFilteredSites()
+```
+
+#### **Time-Series Data with Caching**
+```typescript
+// Check cache first, fetch if needed
+let timeSeriesData = cache.getTimeSeriesData(siteId)
+if (!timeSeriesData) {
+  const rawData = await getSiteHistoricalChartData(siteId)
+  cache.setTimeSeriesData(siteId, rawData)
+  timeSeriesData = rawData
+}
+```
+
+#### **Advanced Export Options**
+```typescript
+// Export with full metadata
+exportTimeSeriesData(rawData, siteName, siteId, 'custom_filename.csv', {
+  includeMetadata: true,
+  includeQualifiers: true,
+  dateFormat: 'iso'
+})
+```
+
+### Performance Optimizations
+
+- **Intelligent Caching**: 5-minute TTL prevents unnecessary API calls
+- **Request Deduplication**: Prevents duplicate data fetching
+- **Memory Management**: Automatic cache cleanup for expired entries
+- **Memoized Transformations**: Expensive operations cached
+- **Background Processing**: Non-blocking data operations
+
+### Migration and Compatibility
+
+- **Backward Compatibility**: All existing components continue to work
+- **Legacy Functions**: Maintained with deprecation notices
+- **Gradual Migration**: Components can be updated incrementally
+- **Type Safety**: Strict TypeScript interfaces throughout
+
+### Benefits
+
+1. **Eliminates Data Duplication**: Single source of truth for all data
+2. **Improved Performance**: Intelligent caching reduces API calls
+3. **Enhanced Export**: Complete database data with configurable options
+4. **Better Maintainability**: Centralized logic easier to update
+5. **Type Safety**: Comprehensive interfaces prevent runtime errors
+6. **User Experience**: Faster data access and comprehensive exports

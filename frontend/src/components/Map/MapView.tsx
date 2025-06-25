@@ -21,12 +21,13 @@ export function MapView({
   setChartError,
   setChartLoading,
   setSelectedSite,
-  setFilteredSiteCount
+  setFilteredSiteCount,
+  setFilteredSites
 }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const map = useRef<mapboxgl.Map | null>(null)
   const [sites, setSites] = useState<GroundwaterMonitoringSite[]>([])
-  const [filteredSites, setFilteredSites] = useState<GroundwaterMonitoringSite[]>([])
+  const [localFilteredSites, setLocalFilteredSites] = useState<GroundwaterMonitoringSite[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mapReady, setMapReady] = useState(false)
@@ -53,13 +54,14 @@ export function MapView({
       return count >= measurementFilter.min &&
         (measurementFilter.max === null || count <= measurementFilter.max)
     })
+    setLocalFilteredSites(filtered)
     setFilteredSites(filtered)
     setFilteredSiteCount(filtered.length)
-  }, [sites, measurementFilter, setFilteredSiteCount])
+  }, [sites, measurementFilter, setFilteredSiteCount, setFilteredSites])
 
   const geojsonData = useMemo(() => {
-    return sitesToEnhancedGeoJSON(filteredSites)
-  }, [filteredSites])
+    return sitesToEnhancedGeoJSON(localFilteredSites)
+  }, [localFilteredSites])
 
   // Map initialization effect - runs only once
   useEffect(() => {
@@ -111,7 +113,7 @@ export function MapView({
               paint: {
                 'line-color': '#000000',
                 'line-width': 1.2,
-                'line-opacity': 0.2  // Add this line
+                'line-opacity': 0.2  
               }
             }, 'site-points')
           })
@@ -254,7 +256,7 @@ export function MapView({
       source.setData(geojsonData)
       
       // Fit bounds only on initial load (when all sites are showing)
-      if (geojsonData.features.length > 0 && filteredSites.length === sites.length) {
+      if (geojsonData.features.length > 0 && localFilteredSites.length === sites.length) {
         const bounds = new mapboxgl.LngLatBounds()
         geojsonData.features.forEach(feature => {
           if (feature.geometry.type === 'Point') {
@@ -264,7 +266,7 @@ export function MapView({
         map.current.fitBounds(bounds, { padding: 50 })
       }
     }
-  }, [geojsonData, mapReady, filteredSites.length, sites.length])
+  }, [geojsonData, mapReady, localFilteredSites.length, sites.length])
 
   if (loading) {
     return (
