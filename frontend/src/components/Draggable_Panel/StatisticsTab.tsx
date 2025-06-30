@@ -1,12 +1,8 @@
-import type { ChartTabContentProps } from './ChartTab'
 import { formatDate, getDataQuality } from '../../lib/groundwater/dataUtils'
+import type { DraggablePanelTabProps } from './types'
 
-type StatisticsTabContentProps = {
-  siteId: string
-  chartData: ChartTabContentProps['chartData']
-}
-
-export function StatisticsTabContent({ siteId, chartData }: StatisticsTabContentProps) {
+export function StatisticsTabContent({ data }: DraggablePanelTabProps) {
+  const { siteId, chartData } = data
   if (!chartData || chartData.data.length === 0) {
     return (
       <div style={{

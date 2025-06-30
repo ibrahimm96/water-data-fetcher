@@ -1,20 +1,9 @@
 import { LineChart } from '@mui/x-charts/LineChart'
-import { formatDate, type RawTimeSeriesData } from '../../lib/groundwater/dataUtils'
+import { formatDate } from '../../lib/groundwater/dataUtils'
+import type { DraggablePanelTabProps } from './types'
 
-export interface ChartTabContentProps {
-  isLoading: boolean
-  error: string | null
-  chartData: {
-    data: Array<{ date: number; value: number; dateString: string }>
-    unit: string | null
-    variable_name: string | null
-    dateRange: { start: string; end: string } | null
-    totalPoints: number
-    rawData?: RawTimeSeriesData[]
-  } | null
-}
-
-export function ChartTabContent({ isLoading, error, chartData }: ChartTabContentProps) {
+export function ChartTabContent({ data }: DraggablePanelTabProps) {
+  const { isLoading, error, chartData } = data
   if (isLoading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>

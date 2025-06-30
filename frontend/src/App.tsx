@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { MapView } from './components/Map/MapView'
 import { Sidebar } from './components/Sidebar'
 import { DraggablePanel } from './components/Draggable_Panel/DraggablePanel'
+import type { DraggablePanelData } from './components/Draggable_Panel/types'
 import { MapSettingsPanel } from './components/MapSettingsPanel'
 import type { GroundwaterMonitoringSite } from './lib/groundwater/types'
 import './App.css'
@@ -10,7 +11,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [selectedSite, setSelectedSite] = useState<{ id: string; name: string } | null>(null)
   const [chartVisible, setChartVisible] = useState(false)
-  const [chartData, setChartData] = useState<any>(null)
+  const [chartData, setChartData] = useState<DraggablePanelData['chartData']>(null)
   const [chartLoading, setChartLoading] = useState(false)
   const [chartError, setChartError] = useState<string | null>(null)
 

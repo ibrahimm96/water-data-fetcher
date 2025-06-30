@@ -1,19 +1,5 @@
-export interface ChartData {
-  data: Array<{ date: number; value: number; dateString: string }>
-  unit: string | null
-  variable_name: string | null
-  dateRange: { start: string; end: string } | null
-  totalPoints?: number
-}
-
-// export interface MapSettings {
-//   style: 'streets' | 'satellite' | 'dark' | 'light'
-//   showCountyBorders: boolean
-//   showLabels: boolean
-//   enable3DTerrain: boolean
-// }
-
 import type { GroundwaterMonitoringSite } from '../../lib/groundwater/types'
+import type { DraggablePanelData } from '../Draggable_Panel/types'
 
 export interface MapViewProps {
   measurementFilter: {
@@ -21,7 +7,7 @@ export interface MapViewProps {
     max: number | null
   }
   setChartVisible: (visible: boolean) => void
-  setChartData: (data: ChartData | null) => void
+  setChartData: (data: DraggablePanelData['chartData']) => void
   setChartError: (error: string | null) => void
   setChartLoading: (loading: boolean) => void
   setSelectedSite: (site: { id: string; name: string } | null) => void

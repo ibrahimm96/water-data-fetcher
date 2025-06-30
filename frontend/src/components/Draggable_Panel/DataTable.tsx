@@ -1,17 +1,16 @@
 import type { Key } from 'react'
-import type { ChartTabContentProps } from './ChartTab'
-import { formatDate, getDataQuality, exportTimeSeriesData, downloadCSV, type RawTimeSeriesData } from '../../lib/groundwater/dataUtils'
+import { formatDate, getDataQuality, exportTimeSeriesData, downloadCSV } from '../../lib/groundwater/dataUtils'
+import type { DraggablePanelTabProps } from './types'
 
-type DataTableProps = {
-  data: NonNullable<ChartTabContentProps['chartData']>['data']
-  unit: string | null
-  siteId?: string
-  siteName?: string
-  rawData?: RawTimeSeriesData[]
-}
-
-export function DataTable({ data, unit, siteId, siteName, rawData }: DataTableProps) {
-  const dataQuality = getDataQuality(data.length)
+export function DataTable({ data }: DraggablePanelTabProps) {
+  const { siteId, siteName, chartData } = data
+  
+  if (!chartData?.data) return null
+  
+  const tableData = chartData.data
+  const unit = chartData.unit
+  const rawData = chartData.rawData
+  const dataQuality = getDataQuality(tableData.length)
   
   const downloadTimeSeriesCSV = () => {
     if (rawData && rawData.length > 0) {
@@ -26,7 +25,7 @@ export function DataTable({ data, unit, siteId, siteName, rawData }: DataTablePr
     
     // Fallback to processed data if raw data not available
     const headers = ['Date', `Value${unit ? ` (${unit})` : ''}`]
-    const csvRows = data.map(row => [
+    const csvRows = tableData.map(row => [
       formatDate(new Date(row.date).getTime()),
       row.value.toFixed(2)
     ])
@@ -53,7 +52,7 @@ export function DataTable({ data, unit, siteId, siteName, rawData }: DataTablePr
         justifyContent: 'space-between'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span>Measurement Table ({data.length.toLocaleString()} records)</span>
+          <span>Measurement Table ({tableData.length.toLocaleString()} records)</span>
           <span style={{
             padding: '2px 6px',
             backgroundColor: dataQuality.color,
@@ -89,7 +88,7 @@ export function DataTable({ data, unit, siteId, siteName, rawData }: DataTablePr
           </tr>
         </thead>
         <tbody>
-          {data.map((row: { date: string | number | Date; value: number }, idx: Key | null | undefined) => (
+          {tableData.map((row: { date: string | number | Date; value: number }, idx: Key | null | undefined) => (
             <tr key={idx}>
               <td style={{ padding: '4px 8px', color: '#2c3e50' }}>{formatDate(new Date(row.date).getTime())}</td>
               <td style={{ padding: '4px 8px', color: '#2c3e50' }}>{row.value.toFixed(2)}</td>

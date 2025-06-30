@@ -3,43 +3,25 @@ import { useState, useRef } from 'react'
 import { ChartTabContent } from './ChartTab'
 import { DataTable } from './DataTable'
 import { StatisticsTabContent } from './StatisticsTab'
-import type { ChartTabContentProps } from './ChartTab'
+import type { DraggablePanelData, ActiveTab } from './types'
 import { getDataQuality, getDataCache } from '../../lib/groundwater/dataUtils'
 
-interface DraggablePanelProps {
-  siteId: string
-  siteName: string
-  isVisible: boolean
-  onClose: () => void
-  chartData: ChartTabContentProps['chartData']
-  isLoading: boolean
-  error: string | null
-}
-
-export function DraggablePanel({
-  siteId,
-  siteName,
-  isVisible,
-  onClose,
-  chartData,
-  isLoading,
-  error
-}: DraggablePanelProps) {
-  const [activeTab, setActiveTab] = useState<'chart' | 'statistics' | 'table'>('chart')
+export function DraggablePanel(data: DraggablePanelData) {
+  const [activeTab, setActiveTab] = useState<ActiveTab>('chart')
   const [size] = useState({ width: 600, height: 400 })
 
   const nodeRef = useRef<HTMLDivElement>(null!)
 
   // Use centralized data formatting and caching
   const cache = getDataCache()
-  const dataQuality = chartData ? getDataQuality(chartData.totalPoints) : null
+  const dataQuality = data.chartData ? getDataQuality(data.chartData.totalPoints) : null
   
   // Cache the data for future access
-  if (chartData) {
-    cache.setTimeSeriesData(siteId, chartData)
+  if (data.chartData) {
+    cache.setTimeSeriesData(data.siteId, data.chartData)
   }
 
-  if (!isVisible) return null
+  if (!data.isVisible) return null
 
   return (
     <Draggable handle=".panel-header" nodeRef={nodeRef}>
@@ -75,10 +57,10 @@ export function DraggablePanel({
         >
           <div>
             <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#2c3e50' }}>
-              Site Name: {siteName || 'Unnamed Site'}
+              Site Name: {data.siteName || 'Unnamed Site'}
             </h3>
             <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
-              Site ID: {siteId}
+              Site ID: {data.siteId}
               {dataQuality && (
                 <span style={{ 
                   marginLeft: '8px', 
@@ -95,7 +77,7 @@ export function DraggablePanel({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={data.onClose}
             style={{
               background: 'none',
               border: 'none',
@@ -135,20 +117,14 @@ export function DraggablePanel({
         {/* Content */}
         <div style={{ flex: 1, padding: '16px', overflow: 'hidden' }}>
           {activeTab === 'chart' && (
-            <ChartTabContent isLoading={isLoading} error={error} chartData={chartData} />
+            <ChartTabContent data={data} />
           )}
           {activeTab === 'statistics' && (
-            <StatisticsTabContent siteId={siteId} chartData={chartData} />
+            <StatisticsTabContent data={data} />
           )}
-          {activeTab === 'table' && chartData?.data?.length ? (
+          {activeTab === 'table' && data.chartData?.data?.length ? (
             <div style={{ height: '100%', overflowY: 'auto' }}>
-              <DataTable 
-                data={chartData.data} 
-                unit={chartData.unit}
-                siteId={siteId}
-                siteName={siteName}
-                rawData={chartData.rawData}
-              />
+              <DataTable data={data} />
             </div>
           ) : null}
         </div>
