@@ -2,10 +2,6 @@ import type { GroundwaterMonitoringSite } from '../../lib/groundwater/types'
 import type { DraggablePanelData } from '../Draggable_Panel/types'
 
 export interface MapViewProps {
-  measurementFilter: {
-    min: number
-    max: number | null
-  }
   setChartVisible: (visible: boolean) => void
   setChartData: (data: DraggablePanelData['chartData']) => void
   setChartError: (error: string | null) => void

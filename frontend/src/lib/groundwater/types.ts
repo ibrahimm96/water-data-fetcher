@@ -18,6 +18,12 @@ export interface GroundwaterMonitoringSite {
     altitude: number | null
     vertical_datum: string | null
     measurement_count?: number
+    actualDateRange?: {
+        startYear: number
+        endYear: number
+        firstMeasurement: string
+        lastMeasurement: string
+    }
 }
 
 export interface GroundwaterHistoricalTimeSeries {

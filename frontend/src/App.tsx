@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { MapView } from './components/Map/MapView'
 import { Sidebar } from './components/Sidebar'
 import { DraggablePanel } from './components/Draggable_Panel/DraggablePanel'
 import type { DraggablePanelData } from './components/Draggable_Panel/types'
 import { MapSettingsPanel } from './components/MapSettingsPanel'
 import type { GroundwaterMonitoringSite } from './lib/groundwater/types'
+import { getDataCache, type MeasurementFilter, type DateFilter } from './lib/groundwater/dataCache'
 import './App.css'
 
 function App() {
@@ -16,16 +17,66 @@ function App() {
   const [chartError, setChartError] = useState<string | null>(null)
 
 
-  const [measurementFilter, setMeasurementFilter] = useState<{
-    min: number
-    max: number | null
-  }>({
+  const [measurementFilter, setMeasurementFilter] = useState<MeasurementFilter>({
     min: 0,
     max: null
   })
 
+  // Initialize filters in cache on startup
+  useEffect(() => {
+    console.log('=== INITIALIZING FILTERS ===')
+    const cache = getDataCache()
+    const initMeasurement = { min: 0, max: null }
+    const initDate = { startYear: 1900, endYear: new Date().getFullYear() }
+    console.log('Setting initial measurement filter:', initMeasurement)
+    console.log('Setting initial date filter:', initDate)
+    cache.setFilter('measurement', initMeasurement)
+    cache.setFilter('date', initDate)
+    console.log('=== FILTERS INITIALIZED ===')
+  }, [])
+
+  const [dateFilter, setDateFilter] = useState<DateFilter>({
+    startYear: 1900,
+    endYear: new Date().getFullYear()
+  })
+
   const [filteredSiteCount, setFilteredSiteCount] = useState(0)
   const [filteredSites, setFilteredSites] = useState<GroundwaterMonitoringSite[]>([])
+
+  // Connect filters to cache system
+  useEffect(() => {
+    console.log('=== APP.tsx: MEASUREMENT FILTER CHANGED ===')
+    console.log('New measurement filter:', measurementFilter)
+    
+    const cache = getDataCache()
+    cache.setFilter('measurement', measurementFilter)
+    
+    // Trigger MapView update
+    const updateFn = (window as unknown as { __updateMapFilteredSites?: () => void }).__updateMapFilteredSites
+    console.log('MapView update function available:', !!updateFn)
+    if (updateFn) {
+      console.log('Calling MapView update...')
+      updateFn()
+    }
+    console.log('=== END APP.tsx MEASUREMENT FILTER ===')
+  }, [measurementFilter])
+
+  useEffect(() => {
+    console.log('=== APP.tsx: DATE FILTER CHANGED ===')
+    console.log('New date filter:', dateFilter)
+    
+    const cache = getDataCache()
+    cache.setFilter('date', dateFilter)
+    
+    // Trigger MapView update
+    const updateFn = (window as unknown as { __updateMapFilteredSites?: () => void }).__updateMapFilteredSites
+    console.log('MapView update function available:', !!updateFn)
+    if (updateFn) {
+      console.log('Calling MapView update...')
+      updateFn()
+    }
+    console.log('=== END APP.tsx DATE FILTER ===')
+  }, [dateFilter])
 
   return (
     <div style={{
@@ -91,8 +142,11 @@ function App() {
           onClose={() => setSidebarOpen(false)}
           measurementFilter={measurementFilter}
           onMeasurementFilterChange={setMeasurementFilter}
+          dateFilter={dateFilter}
+          onDateFilterChange={setDateFilter}
           filteredSiteCount={filteredSiteCount}
-          filteredSites={filteredSites}        />
+          filteredSites={filteredSites}
+        />
         {!sidebarOpen && (
           <button
             onClick={() => setSidebarOpen(true)}
@@ -117,7 +171,6 @@ function App() {
         )}
 
         <MapView
-          measurementFilter={measurementFilter}
           setChartVisible={setChartVisible}
           setChartData={setChartData}
           setChartError={setChartError}

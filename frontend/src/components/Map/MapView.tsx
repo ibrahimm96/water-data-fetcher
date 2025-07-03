@@ -15,7 +15,6 @@ if (!mapboxAccessToken) {
 mapboxgl.accessToken = mapboxAccessToken
 
 export function MapView({
-  measurementFilter,
   setChartVisible,
   setChartData,
   setChartError,
@@ -51,21 +50,34 @@ export function MapView({
       }
     }
     loadSites()
-  }, [])
+  }, [cache])
 
+  // Update filtered sites when cache changes
   useEffect(() => {
-    const filtered = sites.filter(site => {
-      const count = site.measurement_count || 0
-      return count >= measurementFilter.min &&
-        (measurementFilter.max === null || count <= measurementFilter.max)
-    })
-    setLocalFilteredSites(filtered)
-    setFilteredSites(filtered)
-    setFilteredSiteCount(filtered.length)
+    const updateFiltered = () => {
+      console.log('=== MAPVIEW: UPDATING FILTERED SITES ===')
+      const filtered = cache.getFilteredSites()
+      console.log('Cache returned filtered sites:', filtered.length)
+      
+      setLocalFilteredSites(filtered)
+      setFilteredSites(filtered)
+      setFilteredSiteCount(filtered.length)
+      
+      console.log('Updated MapView state with', filtered.length, 'sites')
+      console.log('=== END MAPVIEW UPDATE ===')
+    }
     
-    // Update centralized cache with current filter
-    cache.setFilter(measurementFilter)
-  }, [sites, measurementFilter, setFilteredSiteCount, setFilteredSites, cache])
+    // Update immediately
+    updateFiltered()
+    
+    // Set up the window function for App.tsx to call
+    const windowObj = window as unknown as { __updateMapFilteredSites?: () => void }
+    windowObj.__updateMapFilteredSites = updateFiltered
+    
+    return () => {
+      delete (window as unknown as { __updateMapFilteredSites?: () => void }).__updateMapFilteredSites
+    }
+  }, [sites, cache, setFilteredSites, setFilteredSiteCount])
 
   const geojsonData = useMemo(() => {
     return sitesToEnhancedGeoJSON(localFilteredSites)

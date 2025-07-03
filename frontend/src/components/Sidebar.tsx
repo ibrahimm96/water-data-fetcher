@@ -1,6 +1,7 @@
 import { Range } from 'react-range'
 import type { GroundwaterMonitoringSite } from '../lib/groundwater/types'
 import { exportSitesData } from '../lib/groundwater/dataUtils'
+import { useState, useEffect } from 'react'
 
 type SiteWithCount = GroundwaterMonitoringSite & {
   measurement_count?: number
@@ -16,11 +17,26 @@ interface SidebarProps {
   onMeasurementFilterChange: (filter: { min: number; max: number | null }) => void
   filteredSiteCount: number
   filteredSites: SiteWithCount[]
+  dateFilter: {
+    startYear: number
+    endYear: number
+  }
+  onDateFilterChange: (filter: { startYear: number; endYear: number }) => void
 }
 
 const STEP = 1
 const MIN = 0
 const MAX = 100
+
+// Date range constants (common groundwater monitoring period)
+const DATE_MIN = 1900
+const DATE_MAX = new Date().getFullYear()
+
+// Available filters configuration
+const AVAILABLE_FILTERS = [
+  { key: 'measurement', label: 'Measurement Count' },
+  { key: 'date', label: 'Date Range' }
+]
 
 // Sidebar Component
 export function Sidebar({
@@ -28,17 +44,51 @@ export function Sidebar({
   onClose,
   measurementFilter,
   onMeasurementFilterChange,
+  dateFilter,
+  onDateFilterChange,
   filteredSiteCount,
   filteredSites
 }: SidebarProps) {
-  // Handle centralized CSV export
+  const [filters, setFilters] = useState<string[]>(['measurement', 'date'])
+  const [localDateFilter, setLocalDateFilter] = useState<[number, number]>([dateFilter.startYear, dateFilter.endYear])
+  const [newFilter, setNewFilter] = useState('')
+
+  // Sync local date filter with props
+  useEffect(() => {
+    console.log('Sidebar: Syncing date filter with props')
+    console.log('  - dateFilter prop:', dateFilter)
+    console.log('  - localDateFilter state:', localDateFilter)
+    setLocalDateFilter([dateFilter.startYear, dateFilter.endYear])
+  }, [dateFilter.startYear, dateFilter.endYear])
+
   const handleExportCSV = () => {
     exportSitesData(filteredSites, 'groundwater_sites.csv')
   }
+
+  const handleAddFilter = () => {
+    if (newFilter && !filters.includes(newFilter)) {
+      setFilters([...filters, newFilter])
+    }
+    setNewFilter('')
+  }
+
+  const handleRemoveFilter = (filterKey: string) => {
+    setFilters(filters.filter(f => f !== filterKey))
+    if (filterKey === 'date') {
+      const resetFilter = { startYear: DATE_MIN, endYear: DATE_MAX }
+      setLocalDateFilter([DATE_MIN, DATE_MAX])
+      onDateFilterChange(resetFilter)
+    }
+    if (filterKey === 'measurement') {
+      onMeasurementFilterChange({ min: MIN, max: null })
+    }
+  }
+
   const sliderValues = [
     measurementFilter.min,
     measurementFilter.max === null ? MAX : measurementFilter.max
   ]
+  
 
   return (
     <div style={{
@@ -78,6 +128,7 @@ export function Sidebar({
       </div>
 
       <div style={{ padding: '20px' }}>
+        {/* Site Type */}
         <h4 style={{
           color: '#ecf0f1',
           fontSize: '12px',
@@ -105,77 +156,249 @@ export function Sidebar({
             Groundwater Historical Sites
           </span>
         </label>
-      </div>
 
-      <div style={{ padding: '20px' }}>
+        {/* Filters Section */}
         <h4 style={{
           color: '#ecf0f1',
           fontSize: '12px',
           fontWeight: '600',
           textTransform: 'uppercase',
-          marginBottom: '12px'
+          margin: '20px 0 12px'
         }}>
-          Measurement Count Filter
+          Filters
         </h4>
 
-        {/* Dual Handle Range Slider */}
-        <Range
-          step={STEP}
-          min={MIN}
-          max={MAX}
-          values={sliderValues}
-          onChange={(values) => {
-            const [min, max] = values
-            onMeasurementFilterChange({
-              min,
-              max: max === MAX ? null : max
-            })
-          }}
-          renderTrack={({ props, children }) => (
-            <div
-              {...props}
-              style={{
-                ...props.style,
-                height: '6px',
-                background: '#34495e',
-                borderRadius: '3px',
-                marginBottom: '24px'
-              }}
-            >
-              <div
-                style={{
-                  height: '100%',
-                  background: '#3498db',
-                  marginLeft: `${((sliderValues[0] - MIN) / (MAX - MIN)) * 100}%`,
-                  width: `${((sliderValues[1] - sliderValues[0]) / (MAX - MIN)) * 100}%`
+        {/* Sleek Filter Selector */}
+        <div style={{ display: 'flex', marginBottom: '16px', height: '36px' }}>
+          <select
+            value={newFilter}
+            onChange={(e) => setNewFilter(e.target.value)}
+            style={{
+              flexGrow: 1,
+              border: '1px solid #3498db',
+              borderRight: 'none',
+              borderRadius: '6px 0 0 6px',
+              padding: '0 10px',
+              backgroundColor: '#2c3e50',
+              color: '#ecf0f1',
+              fontSize: '14px',
+              outline: 'none',
+              WebkitAppearance: 'none',
+              MozAppearance: 'none',
+              appearance: 'none',
+              cursor: 'pointer',
+              height: '100%',
+              userSelect: 'none'
+            }}
+          >
+            <option value="">Select filter...</option>
+            {AVAILABLE_FILTERS.filter(f => !filters.includes(f.key)).map(f => (
+              <option key={f.key} value={f.key}>{f.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={handleAddFilter}
+            style={{
+              backgroundColor: '#3498db',
+              color: '#fff',
+              border: '1px solid #3498db',
+              borderRadius: '0 6px 6px 0',
+              padding: '0 14px',
+              fontWeight: 600,
+              fontSize: '14px',
+              cursor: 'pointer',
+              height: '100%',
+              userSelect: 'none',
+              outline: 'none'
+            }}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            Add Filter
+          </button>
+        </div>
+
+        {/* Render Active Filters */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {filters.includes('measurement') && (
+            <div key="measurement-filter">
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '12px'
+              }}>
+                <h4 style={{
+                  color: '#ecf0f1',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  textTransform: 'uppercase',
+                  margin: 0
+                }}>
+                  Measurement Count Filter
+                </h4>
+                <button
+                  onClick={() => handleRemoveFilter('measurement')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#bdc3c7',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    padding: 0,
+                    marginLeft: '8px'
+                  }}
+                  title="Remove filter"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <Range
+                key="measurement-range"
+                step={STEP}
+                min={MIN}
+                max={MAX}
+                values={sliderValues}
+                onChange={(values) => {
+                  const [min, max] = values
+                  onMeasurementFilterChange({
+                    min,
+                    max: max === MAX ? null : max
+                  })
                 }}
+                renderTrack={({ props, children }) => (
+                  <div
+                    {...props}
+                    style={{
+                      ...props.style,
+                      height: '6px',
+                      background: '#34495e',
+                      borderRadius: '3px',
+                      marginBottom: '12px'
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: '100%',
+                        background: '#3498db',
+                        marginLeft: `${((sliderValues[0] - MIN) / (MAX - MIN)) * 100}%`,
+                        width: `${((sliderValues[1] - sliderValues[0]) / (MAX - MIN)) * 100}%`
+                      }}
+                    />
+                    {children}
+                  </div>
+                )}
+                renderThumb={({ props }) => (
+                  <div
+                    {...props}
+                    style={{
+                      ...props.style,
+                      height: '16px',
+                      width: '16px',
+                      borderRadius: '50%',
+                      backgroundColor: '#3498db',
+                      border: '2px solid #ecf0f1',
+                      cursor: 'pointer',
+                      marginTop: '-5px'
+                    }}
+                  />
+                )}
               />
-              {children}
             </div>
           )}
 
-          renderThumb={({ props }) => (
-            <div
-              {...props}
-              style={{
-                ...props.style,
-                height: '16px',
-                width: '16px',
-                borderRadius: '50%',
-                backgroundColor: '#1abc9c',
-                border: '2px solid #ecf0f1',
-                cursor: 'pointer',
+          {filters.includes('date') && (
+            <div key="date-filter">
+              <div style={{
                 display: 'flex',
+                justifyContent: 'space-between',
                 alignItems: 'center',
-                justifyContent: 'center',
-                marginTop: '-5px' 
-              }}
-            />
+                marginBottom: '12px'
+              }}>
+                <h4 style={{
+                  color: '#ecf0f1',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  textTransform: 'uppercase',
+                  margin: 0
+                }}>
+                  Date Range Filter
+                </h4>
+                <button
+                  onClick={() => handleRemoveFilter('date')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#bdc3c7',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    padding: 0,
+                    marginLeft: '8px'
+                  }}
+                  title="Remove filter"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <Range
+                key="date-range"
+                step={1}
+                min={DATE_MIN}
+                max={DATE_MAX}
+                values={localDateFilter}
+                onChange={(values) => {
+                  setLocalDateFilter([values[0], values[1]])
+                  onDateFilterChange({ startYear: values[0], endYear: values[1] })
+                }}
+                renderTrack={({ props, children }) => (
+                  <div
+                    {...props}
+                    style={{
+                      ...props.style,
+                      height: '6px',
+                      background: '#34495e',
+                      borderRadius: '3px',
+                      marginBottom: '12px'
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: '100%',
+                        background: '#3498db',
+                        marginLeft: `${((localDateFilter[0] - DATE_MIN) / (DATE_MAX - DATE_MIN)) * 100}%`,
+                        width: `${((localDateFilter[1] - localDateFilter[0]) / (DATE_MAX - DATE_MIN)) * 100}%`
+                      }}
+                    />
+                    {children}
+                  </div>
+                )}
+                renderThumb={({ props }) => (
+                  <div
+                    {...props}
+                    style={{
+                      ...props.style,
+                      height: '16px',
+                      width: '16px',
+                      borderRadius: '50%',
+                      backgroundColor: '#3498db',
+                      border: '2px solid #ecf0f1',
+                      cursor: 'pointer',
+                      marginTop: '-5px'
+                    }}
+                  />
+                )}
+              />
+              <div style={{ fontSize: '12px', color: '#bdc3c7' }}>
+                {localDateFilter[0]} to {localDateFilter[1]}
+              </div>
+            </div>
           )}
+        </div>
 
-        />
-
+        {/* Site Count Display */}
         <div style={{
+          marginTop: '24px',
           padding: '12px',
           backgroundColor: '#2c3e50',
           borderRadius: '4px',
@@ -187,9 +410,19 @@ export function Sidebar({
           <strong style={{ color: '#3498db' }}>
             {measurementFilter.max === null ? '∞' : measurementFilter.max}
           </strong> measurements
+          {filters.includes('date') && (
+            <>
+              <br />
+              Date range: <strong style={{ color: '#3498db' }}>{dateFilter.startYear}</strong>
+              {' to '}
+              <strong style={{ color: '#3498db' }}>{dateFilter.endYear}</strong>
+            </>
+          )}
           <br />
           (<strong style={{ color: '#3498db' }}>{filteredSiteCount.toLocaleString()}</strong> total)
         </div>
+
+        {/* Export Button */}
         <div style={{ marginTop: '16px' }}>
           <button
             onClick={handleExportCSV}
@@ -202,8 +435,11 @@ export function Sidebar({
               cursor: 'pointer',
               fontWeight: 600,
               fontSize: '14px',
-              width: '100%'
+              width: '100%',
+              userSelect: 'none',
+              outline: 'none'
             }}
+            onMouseDown={(e) => e.preventDefault()}
           >
             Export Filtered Sites
           </button>

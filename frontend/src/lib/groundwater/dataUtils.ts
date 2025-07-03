@@ -1,4 +1,5 @@
 import type { GroundwaterMonitoringSite } from './types'
+import { getDataCache, type RawTimeSeriesData } from './dataCache'
 
 /**
  * CENTRALIZED DATA MANAGEMENT SYSTEM
@@ -27,37 +28,15 @@ export interface GeoJSONFeatureProperties {
   marker_style?: SiteMarkerStyle
 }
 
-export interface RawTimeSeriesData {
-  measurement_datetime: string
-  measurement_value: number
-  unit: string | null
-  variable_name: string | null
-  variable_code?: string | null
-  qualifiers?: string[] | null
-  method_id?: number | null
-  [key: string]: string | number | boolean | null | string[] | undefined // Allow additional database fields
-}
-
-export interface ProcessedTimeSeriesData {
-  data: Array<{ date: number; value: number; dateString: string }>
-  unit: string | null
-  variable_name: string | null
-  dateRange: { start: string; end: string } | null
-  totalPoints: number
-  rawData?: RawTimeSeriesData[]
-}
-
-export interface SiteWithTimeSeriesData extends GroundwaterMonitoringSite {
-  timeSeriesData?: ProcessedTimeSeriesData
-  lastFetched?: number
-  isLoading?: boolean
-  error?: string | null
-}
-
-export interface MeasurementFilter {
-  min: number
-  max: number | null
-}
+// Re-export cache interfaces for backward compatibility
+export type { 
+  RawTimeSeriesData, 
+  ProcessedTimeSeriesData, 
+  MeasurementFilter, 
+  DateFilter,
+  FilterState,
+  FilterType
+} from './dataCache'
 
 export interface DataQuality {
   level: 'high' | 'medium' | 'low'
@@ -78,139 +57,11 @@ export interface ExportOptions {
 }
 
 // ================================
-// CENTRALIZED DATA CACHE
-// ================================
-
-class DataCache {
-  private static instance: DataCache
-  private sites: Map<string, SiteWithTimeSeriesData> = new Map()
-  private allSites: GroundwaterMonitoringSite[] = []
-  private filteredSites: GroundwaterMonitoringSite[] = []
-  private currentFilter: MeasurementFilter = { min: 0, max: null }
-  private timeSeriesCache: Map<string, { data: ProcessedTimeSeriesData; timestamp: number }> = new Map()
-  private readonly CACHE_TTL = 5 * 60 * 1000 // 5 minutes
-
-  static getInstance(): DataCache {
-    if (!DataCache.instance) {
-      DataCache.instance = new DataCache()
-    }
-    return DataCache.instance
-  }
-
-  // Sites Management
-  setSites(sites: GroundwaterMonitoringSite[]): void {
-    this.allSites = sites
-    sites.forEach(site => {
-      const key = site.monitoring_location_id || site.monitoring_location_number
-      if (key) {
-        this.sites.set(key, { ...site })
-      }
-    })
-    this.applyCurrentFilter()
-  }
-
-  getAllSites(): GroundwaterMonitoringSite[] {
-    return [...this.allSites]
-  }
-
-  getFilteredSites(): GroundwaterMonitoringSite[] {
-    return [...this.filteredSites]
-  }
-
-  getSite(siteId: string): SiteWithTimeSeriesData | undefined {
-    return this.sites.get(siteId)
-  }
-
-  // Filtering
-  setFilter(filter: MeasurementFilter): void {
-    this.currentFilter = filter
-    this.applyCurrentFilter()
-  }
-
-  getFilter(): MeasurementFilter {
-    return { ...this.currentFilter }
-  }
-
-  private applyCurrentFilter(): void {
-    this.filteredSites = this.allSites.filter(site => {
-      const count = site.measurement_count || 0
-      return count >= this.currentFilter.min &&
-        (this.currentFilter.max === null || count <= this.currentFilter.max)
-    })
-  }
-
-  // Time Series Cache Management
-  getTimeSeriesData(siteId: string): ProcessedTimeSeriesData | null {
-    const cached = this.timeSeriesCache.get(siteId)
-    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
-      return cached.data
-    }
-    return null
-  }
-
-  setTimeSeriesData(siteId: string, data: ProcessedTimeSeriesData): void {
-    // Only cache if data is valid
-    if (data && data.data && Array.isArray(data.data)) {
-      this.timeSeriesCache.set(siteId, {
-        data,
-        timestamp: Date.now()
-      })
-      
-      // Update site with cached data
-      const site = this.sites.get(siteId)
-      if (site) {
-        site.timeSeriesData = data
-        site.lastFetched = Date.now()
-        site.isLoading = false
-        site.error = null
-      }
-    }
-  }
-
-  setSiteLoading(siteId: string, loading: boolean, error?: string | null): void {
-    const site = this.sites.get(siteId)
-    if (site) {
-      site.isLoading = loading
-      site.error = error || null
-    }
-  }
-
-  // Cache Management
-  clearCache(): void {
-    this.timeSeriesCache.clear()
-    this.sites.forEach(site => {
-      site.timeSeriesData = undefined
-      site.lastFetched = undefined
-      site.isLoading = false
-      site.error = null
-    })
-  }
-
-  clearExpiredCache(): void {
-    const now = Date.now()
-    for (const [siteId, cached] of this.timeSeriesCache.entries()) {
-      if (now - cached.timestamp >= this.CACHE_TTL) {
-        this.timeSeriesCache.delete(siteId)
-        const site = this.sites.get(siteId)
-        if (site) {
-          site.timeSeriesData = undefined
-          site.lastFetched = undefined
-        }
-      }
-    }
-  }
-}
-
-// ================================
 // CENTRALIZED DATA OPERATIONS
 // ================================
 
-/**
- * Gets the singleton data cache instance
- */
-export function getDataCache(): DataCache {
-  return DataCache.getInstance()
-}
+// Re-export cache accessor for backward compatibility
+export { getDataCache } from './dataCache'
 
 /**
  * Gets consistent marker styling based on measurement count
