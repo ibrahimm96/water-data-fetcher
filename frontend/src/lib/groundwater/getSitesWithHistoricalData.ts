@@ -88,6 +88,9 @@ export const getSitesWithHistoricalData = async (maxSites?: number): Promise<Sit
       altitude: site.altitude ? Number(site.altitude) : null,
       vertical_datum: site.vertical_datum ? String(site.vertical_datum) : null,
       measurement_count: Number(site.measurement_count || 0),
+      min_value: site.min_value !== null && site.min_value !== undefined ? Number(site.min_value) : null,
+      max_value: site.max_value !== null && site.max_value !== undefined ? Number(site.max_value) : null,
+      avg_value: site.avg_value !== null && site.avg_value !== undefined ? Number(site.avg_value) : null,
       actualDateRange
     }
 

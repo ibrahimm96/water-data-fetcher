@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import { MapView } from './components/Map/MapView'
-import { Sidebar } from './components/Sidebar'
+import { Sidebar } from './components/Sidebar/Sidebar'
 import { DraggablePanel } from './components/Draggable_Panel/DraggablePanel'
 import type { DraggablePanelData } from './components/Draggable_Panel/types'
 import { MapSettingsPanel } from './components/MapSettingsPanel'
 import type { GroundwaterMonitoringSite } from './lib/groundwater/types'
-import { getDataCache, type MeasurementFilter, type DateFilter } from './lib/groundwater/dataCache'
+import { getDataCache, type MeasurementFilter, type DateFilter, type MinMaxValueFilter, type AverageValueFilter, type CountyFilter } from './lib/groundwater/dataCache'
 import './App.css'
 
 function App() {
@@ -28,16 +28,39 @@ function App() {
     const cache = getDataCache()
     const initMeasurement = { min: 0, max: null }
     const initDate = { startYear: 1900, endYear: new Date().getFullYear() }
+    const initMinMaxValue = { min: null, max: null }
+    const initAverageValue = { min: null, max: null }
+    const initCounty = { selectedCounties: [] }
     console.log('Setting initial measurement filter:', initMeasurement)
     console.log('Setting initial date filter:', initDate)
+    console.log('Setting initial min/max value filter:', initMinMaxValue)
+    console.log('Setting initial average value filter:', initAverageValue)
+    console.log('Setting initial county filter:', initCounty)
     cache.setFilter('measurement', initMeasurement)
     cache.setFilter('date', initDate)
+    cache.setFilter('minMaxValue', initMinMaxValue)
+    cache.setFilter('averageValue', initAverageValue)
+    cache.setFilter('county', initCounty)
     console.log('=== FILTERS INITIALIZED ===')
   }, [])
 
   const [dateFilter, setDateFilter] = useState<DateFilter>({
     startYear: 1900,
     endYear: new Date().getFullYear()
+  })
+
+  const [minMaxValueFilter, setMinMaxValueFilter] = useState<MinMaxValueFilter>({
+    min: null,
+    max: null
+  })
+
+  const [averageValueFilter, setAverageValueFilter] = useState<AverageValueFilter>({
+    min: null,
+    max: null
+  })
+
+  const [countyFilter, setCountyFilter] = useState<CountyFilter>({
+    selectedCounties: []
   })
 
   const [filteredSiteCount, setFilteredSiteCount] = useState(0)
@@ -77,6 +100,57 @@ function App() {
     }
     console.log('=== END APP.tsx DATE FILTER ===')
   }, [dateFilter])
+
+  useEffect(() => {
+    console.log('=== APP.tsx: MIN/MAX VALUE FILTER CHANGED ===')
+    console.log('New min/max value filter:', minMaxValueFilter)
+    
+    const cache = getDataCache()
+    cache.setFilter('minMaxValue', minMaxValueFilter)
+    
+    // Trigger MapView update
+    const updateFn = (window as unknown as { __updateMapFilteredSites?: () => void }).__updateMapFilteredSites
+    console.log('MapView update function available:', !!updateFn)
+    if (updateFn) {
+      console.log('Calling MapView update...')
+      updateFn()
+    }
+    console.log('=== END APP.tsx MIN/MAX VALUE FILTER ===')
+  }, [minMaxValueFilter])
+
+  useEffect(() => {
+    console.log('=== APP.tsx: AVERAGE VALUE FILTER CHANGED ===')
+    console.log('New average value filter:', averageValueFilter)
+    
+    const cache = getDataCache()
+    cache.setFilter('averageValue', averageValueFilter)
+    
+    // Trigger MapView update
+    const updateFn = (window as unknown as { __updateMapFilteredSites?: () => void }).__updateMapFilteredSites
+    console.log('MapView update function available:', !!updateFn)
+    if (updateFn) {
+      console.log('Calling MapView update...')
+      updateFn()
+    }
+    console.log('=== END APP.tsx AVERAGE VALUE FILTER ===')
+  }, [averageValueFilter])
+
+  useEffect(() => {
+    console.log('=== APP.tsx: COUNTY FILTER CHANGED ===')
+    console.log('New county filter:', countyFilter)
+    
+    const cache = getDataCache()
+    cache.setFilter('county', countyFilter)
+    
+    // Trigger MapView update
+    const updateFn = (window as unknown as { __updateMapFilteredSites?: () => void }).__updateMapFilteredSites
+    console.log('MapView update function available:', !!updateFn)
+    if (updateFn) {
+      console.log('Calling MapView update...')
+      updateFn()
+    }
+    console.log('=== END APP.tsx COUNTY FILTER ===')
+  }, [countyFilter])
 
   return (
     <div style={{
@@ -144,6 +218,12 @@ function App() {
           onMeasurementFilterChange={setMeasurementFilter}
           dateFilter={dateFilter}
           onDateFilterChange={setDateFilter}
+          minMaxValueFilter={minMaxValueFilter}
+          onMinMaxValueFilterChange={setMinMaxValueFilter}
+          averageValueFilter={averageValueFilter}
+          onAverageValueFilterChange={setAverageValueFilter}
+          countyFilter={countyFilter}
+          onCountyFilterChange={setCountyFilter}
           filteredSiteCount={filteredSiteCount}
           filteredSites={filteredSites}
         />

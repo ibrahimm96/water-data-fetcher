@@ -16,7 +16,7 @@ export function MapSettingsPanel() {
       style={{
         position: 'absolute',
         top: '20px',
-        right: '50px',
+        right: '20px',
         width: '260px',
         backgroundColor: '#34495e',
         color: '#ecf0f1',

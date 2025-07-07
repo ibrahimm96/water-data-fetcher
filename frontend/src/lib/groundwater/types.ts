@@ -18,6 +18,9 @@ export interface GroundwaterMonitoringSite {
     altitude: number | null
     vertical_datum: string | null
     measurement_count?: number
+    min_value?: number | null
+    max_value?: number | null
+    avg_value?: number | null
     actualDateRange?: {
         startYear: number
         endYear: number

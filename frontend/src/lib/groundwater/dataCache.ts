@@ -36,12 +36,12 @@ export interface SiteWithTimeSeriesData extends GroundwaterMonitoringSite {
   lastFetched?: number
   isLoading?: boolean
   error?: string | null
-  // Enhanced date range information
+  // date range information
   actualDateRange?: {
     startYear: number
     endYear: number
-    firstMeasurement?: string
-    lastMeasurement?: string
+    firstMeasurement: string
+    lastMeasurement: string
   }
 }
 
@@ -59,19 +59,35 @@ export interface DateFilter {
   endYear: number
 }
 
+export interface MinMaxValueFilter {
+  min: number | null
+  max: number | null
+}
+
+export interface AverageValueFilter {
+  min: number | null
+  max: number | null
+}
+
+export interface CountyFilter {
+  selectedCounties: string[] // Array of county codes like ["001", "107", "036"]
+}
+
 export interface FilterState {
   measurement: MeasurementFilter
   date: DateFilter
+  minMaxValue: MinMaxValueFilter
+  averageValue: AverageValueFilter
+  county: CountyFilter
   // Future filters can be added here
   // location?: LocationFilter
-  // dataQuality?: DataQualityFilter
   // agency?: AgencyFilter
 }
 
 export type FilterType = keyof FilterState
 
 // Union type for all possible filter values
-export type FilterValue = MeasurementFilter | DateFilter
+export type FilterValue = MeasurementFilter | DateFilter | MinMaxValueFilter | AverageValueFilter | CountyFilter
 
 export interface FilterConfig<T = FilterValue> {
   key: FilterType
@@ -83,6 +99,9 @@ export interface FilterConfig<T = FilterValue> {
 // Default filter values
 const DEFAULT_MEASUREMENT_FILTER: MeasurementFilter = { min: 0, max: null }
 const DEFAULT_DATE_FILTER: DateFilter = { startYear: 1900, endYear: new Date().getFullYear() }
+const DEFAULT_MIN_MAX_VALUE_FILTER: MinMaxValueFilter = { min: null, max: null }
+const DEFAULT_AVERAGE_VALUE_FILTER: AverageValueFilter = { min: null, max: null }
+const DEFAULT_COUNTY_FILTER: CountyFilter = { selectedCounties: [] }
 
 // ================================
 // CENTRALIZED DATA CACHE CLASS
@@ -172,6 +191,84 @@ class DataCache {
           console.log('Excluding site without date range data:', site.monitoring_location_name)
         }
         return false
+      }
+    }],
+    ['minMaxValue', {
+      key: 'minMaxValue',
+      label: 'Min/Max Measurement Value',
+      defaultValue: DEFAULT_MIN_MAX_VALUE_FILTER,
+      applyFilter: (site, filter) => {
+        const valueFilter = filter as MinMaxValueFilter
+        const minValue = site.min_value
+        const maxValue = site.max_value
+        
+        // If site has no measurement values, exclude it
+        if ((minValue === null || minValue === undefined) && (maxValue === null || maxValue === undefined)) {
+          return false
+        }
+        
+        // Apply min filter
+        if (valueFilter.min !== null) {
+          if (minValue === null || minValue === undefined || minValue < valueFilter.min) {
+            return false
+          }
+        }
+        
+        // Apply max filter
+        if (valueFilter.max !== null) {
+          if (maxValue === null || maxValue === undefined || maxValue > valueFilter.max) {
+            return false
+          }
+        }
+        
+        return true
+      }
+    }],
+    ['averageValue', {
+      key: 'averageValue',
+      label: 'Average Measurement Value',
+      defaultValue: DEFAULT_AVERAGE_VALUE_FILTER,
+      applyFilter: (site, filter) => {
+        const valueFilter = filter as AverageValueFilter
+        const avgValue = site.avg_value
+        
+        // If site has no average value, exclude it
+        if (avgValue === null || avgValue === undefined) {
+          return false
+        }
+        
+        // Apply min filter
+        if (valueFilter.min !== null && avgValue !== null && avgValue !== undefined && avgValue < valueFilter.min) {
+          return false
+        }
+        
+        // Apply max filter
+        if (valueFilter.max !== null && avgValue !== null && avgValue !== undefined && avgValue > valueFilter.max) {
+          return false
+        }
+        
+        return true
+      }
+    }],
+    ['county', {
+      key: 'county',
+      label: 'County Filter',
+      defaultValue: DEFAULT_COUNTY_FILTER,
+      applyFilter: (site, filter) => {
+        const countyFilter = filter as CountyFilter
+        
+        // If no counties are selected, show all sites
+        if (countyFilter.selectedCounties.length === 0) {
+          return true
+        }
+        
+        // If site has no county code, exclude it when filter is active
+        if (!site.county_code) {
+          return false
+        }
+        
+        // Check if site's county code is in the selected counties
+        return countyFilter.selectedCounties.includes(site.county_code)
       }
     }]
   ])
@@ -525,4 +622,4 @@ export function addFilterType(
 }
 
 // Export filter defaults for external use
-export { DEFAULT_MEASUREMENT_FILTER, DEFAULT_DATE_FILTER }
+export { DEFAULT_MEASUREMENT_FILTER, DEFAULT_DATE_FILTER, DEFAULT_MIN_MAX_VALUE_FILTER, DEFAULT_AVERAGE_VALUE_FILTER, DEFAULT_COUNTY_FILTER }
